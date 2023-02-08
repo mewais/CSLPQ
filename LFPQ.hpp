@@ -1,119 +1,128 @@
 #include <vector>
-#include <atomic>
 #include <random>
+#include <mutex>
 
-template <typename K, typename V>
-class LFPQNode
+template<typename K, typename V>
+class SLPQNode
 {
     private:
-        K key;
-        V value;
-        std::vector<std::atomic<LFPQNode<K, V>*>> next;
+        K priority;
+        V data;
+        std::vector<SLPQNode<K, V>*> next;
+        std::mutex mutex;
 
     public:
-        LFPQNode(int level, K key, V value)
-            : key(key), value(value), next(level + 1)
+        SLPQNode(K& priority, V& data, int level) : priority(priority), data(data), next(level, nullptr)
         {
-            for (int i = 0; i <= level; i++)
-            {
-                this->next[i].store(nullptr);
-            }
         }
 
-        K GetKey()
+        std::vector<SLPQNode<K, V>*>& GetNext()
         {
-            return this->key;
+            return this->next;
         }
 
-        V GetValue()
+        SLPQNode<K, V>* GetNext(int i)
         {
-            return this->value;
+            return this->next[i];
+        }
+
+        K GetPriority()
+        {
+            return this->priority;
+        }
+
+        V GetData()
+        {
+            return this->data;
+        }
+
+        void Lock()
+        {
+            this->mutex.lock();
+        }
+
+        void Unlock()
+        {
+            this->mutex.unlock();
         }
 };
 
-template <typename K, typename V>
-class LFPQ
+template<typename K, typename V>
+class SLPQ
 {
     private:
-        const int max_level = 16;
-        std::atomic<int> level;
-        LFPQNode<K, V> *head;
-
-    public:
-        LFPQ()
+        int max_level;
+        SLPQNode<K, V>* head;
+        
+        int GenerateRandomLevel()
         {
-            this->level = 0;
-            head = new LFPQNode<K, V>(level, K(), V());
-        }
-
-        int RandomLevel()
-        {
-            static std::mt19937 eng(std::random_device{}());
+            static std::random_device rd;
+            static std::mt19937 mt(rd());
             static std::uniform_int_distribution<int> dist(0, this->max_level - 1);
 
-            return dist(eng);
+            return dist(mt);
         }
 
-        void Push(K key, V value)
+    public:
+        SLPQ(int max_level = 32) : max_level(max_level), head(new SLPQNode<K, V>(K(), V(), max_level)) {}
+        
+        ~SLPQ()
         {
-            std::vector<std::atomic<LFPQNode<K, V>*>> update(this->head->next.size());
-            LFPQNode<K, V> *current = this->head;
-            for (int i = this->level.load(); i >= 0; i--)
+            
+        }
+
+        void Push(K priority, V data)
+        {
+            SLPQNode<K, V>* current = this->head;
+            std::vector<SLPQNode<K, V>*> predecessors(this->max_level, nullptr);
+            for (int i = this->max_level - 1; i >= 0; i--)
             {
-                while (current->next[i].load() && current->next[i].load()->key < key)
+                current->Lock();
+                while (current->GetNext(i) != nullptr && current->GetNext(i)->GetPriority() < priority)
                 {
-                    current = current->next[i].load();
+                    SLPQNode<K, V>* tmp = current->GetNext(i);
+                    current->Unlock();
+                    current = tmp;
+                    current->Lock();
                 }
-                update[i] = current;
+                current->Unlock();
+                predecessors[i] = current;
             }
-            current = current->next[0].load();
-            if (current == nullptr || current->key != key)
+
+            int new_level = this->GenerateRandomLevel();
+            SLPQNode<K, V>* new_node = new SLPQNode<K, V>(priority, data, new_level);
+            for (int i = 0; i <= new_level; i++)
             {
-                int lvl = RandomLevel();
-                if (lvl > this->level.load())
-                {
-                    for (int i = this->level.load() + 1; i <= lvl; i++)
-                    {
-                        update[i] = this->head;
-                    }
-                    this->level = lvl;
-                }
-                LFPQNode<K, V> *newNode = new LFPQNode<K, V>(lvl, key, value);
-                for (int i = 0; i <= lvl; i++)
-                {
-                    newNode->next[i].store(update[i]->next[i].load());
-                    update[i]->next[i].store(newNode);
-                }
+                predecessors[i]->Lock();
+                new_node->next[i] = predecessors[i]->next[i];
+                predecessors[i]->next[i] = new_node;
+                predecessors[i]->Unlock();
             }
         }
 
-        V Pop()
+        bool TryPop(K& priority, V& data)
         {
-            LFPQNode<K, V> *current = this->head->next[0].load();
-            if (current)
+            this->head.Lock();
+            SLPQNode<K, V>* current = this->head->GetNext(0);
+            this->head.Unlock();
+
+            if (current == nullptr)
             {
-                std::vector<std::atomic<LFPQNode<K, V>*>> update(this->head->next.size());
-                for (int i = this->level.load(); i >= 0; i--)
-                {
-                    while (current->next[i].load() && current->next[i].load()->key)
-                    {
-                        current = current->next[i].load();
-                    }
-                    update[i] = current;
-                }
-                current = current->next[0].load();
-                for (int i = 0; i <= this->level.load(); i++)
-                {
-                    update[i]->next[i].store(current->next[i].load());
-                }
-                V value = current->value;
+                return false;
+            }
+            else
+            {
+                current->Lock();
+                priority = current->GetPriority();
+                data = current->GetData();
+                SLPQNode<K, V>* tmp = current->GetNext(0);
+                current->Unlock();
+
+                this->head->Lock();
+                this->head->GetNext()[0] = tmp;
+                this->head.Unlock();
                 delete current;
-                while (this->level > 0 && this->head->next[this->level].load() == nullptr)
-                {
-                    this->level--;
-                }
-                return value;
+                return true;
             }
-            return V();
         }
 };
