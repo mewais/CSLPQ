@@ -68,7 +68,14 @@ class SLPQ
         
         ~SLPQ()
         {
-            
+            SLPQNode<K, V> *current = head->GetNext(0), *tmp;
+            while (current != nullptr)
+            {
+                tmp = current->GetNext(0);
+                delete current;
+                current = tmp;
+            }
+            delete head;
         }
 
         void Push(K priority, V data)
