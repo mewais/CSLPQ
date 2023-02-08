@@ -1,105 +1,122 @@
-#include <iostream>
-#include <vector>
-#include <random>
 #include <atomic>
-#include <cassert>
+#include <vector>
 
-const int MAX_LEVEL = 32;
-
-template<typename T>
+template <typename K, typename V>
 class Node
 {
-public:
-    T data;
-    int priority;
-    std::vector<std::atomic<Node<T>*>> next;
-    Node(T data, int priority, int level) : data(data), priority(priority), next(level + 1)
-    {
-        for (int i = 0; i < level + 1; i++)
+    public:
+        K key;
+        V value;
+        std::vector<std::atomic<Node<K, V>*>> next;
+
+        Node(int level, K key, V value)
+            : key(key), value(value), next(level + 1)
         {
-            next[i].store(nullptr);
+            for (int i = 0; i <= level; i++)
+            {
+                next[i].store(nullptr);
+            }
         }
-    }
 };
 
-class RandomNumberGenerator
+template <typename K, typename V>
+class SkipList
 {
-public:
-    RandomNumberGenerator() : mt(rd()), dist(0, MAX_LEVEL - 1) {}
-    int operator()() { return dist(mt); }
-private:
-    std::random_device rd;
-    std::mt19937 mt;
-    std::uniform_int_distribution<int> dist;
-};
-
-template<typename T>
-class LockFreePriorityQueue
-{
-public:
-    LockFreePriorityQueue() : head(new Node<T>(T(), 0, MAX_LEVEL)), level(0) {}
-    ~LockFreePriorityQueue()
-    {
-        while (head.load() != nullptr)
+    public:
+        SkipList(int maxLevel)
+            : head(new Node<K, V>(maxLevel, K(), V())), level(0)
         {
-            Node<T>* curr = head.load();
-            head.store(curr->next[0].load());
-            delete curr;
-        }
-    }
-
-    void push(T data, int priority)
-    {
-        int newLevel = randomNumberGenerator();
-        Node<T>* newNode = new Node<T>(data, priority, newLevel);
-        Node<T>* curr = head.load();
-        std::vector<Node<T>*> pred(MAX_LEVEL + 1);
-        for (int i = level; i >= 0; i--)
-        {
-            while (curr->next[i].load() != nullptr && curr->next[i].load()->priority < priority)
+            for (int i = 0; i <= maxLevel; i++)
             {
-                curr = curr->next[i].load();
+                head->next[i].store(nullptr);
             }
-            pred[i] = curr;
         }
-        curr = curr->next[0].load();
-        for (int i = 0; i <= newLevel; i++)
-        {
-            newNode->next[i].store(pred[i]->next[i].load());
-            pred[i]->next[i].store(newNode);
-        }
-        while (level < newLevel && head.load()->next[level + 1].load() == nullptr)
-        {
-            level++;
-        }
-    }
 
-    T pop()
-    {
-        Node<T>* curr = head.load();
-        while (true)
+        void insert(K key, V value)
         {
-            if (curr->next[0].load() == nullptr)
+            std::vector<Node<K, V>*> update(head->next.size());
+            Node<K, V> *curr = head;
+
+            for (int i = level; i >= 0; i--)
             {
-                return T();
+                while (curr->next[i].load() != nullptr &&
+                       curr->next[i].load()->key < key)
+                {
+                    curr = curr->next[i].load();
+                }
+                update[i] = curr;
             }
-            Node<T>* nextNode = curr->next[0].load();
-            if (head.compare_exchange_weak(curr, nextNode))
+
+            Node<K, V> *nextNode = curr->next[0].load();
+            if (nextNode == nullptr || nextNode->key != key)
             {
-                T data = nextNode->data;
-                delete nextNode;
-                while (level > 0 && head.load()->next[level].load() == nullptr)
+                int newLevel = randomLevel();
+                if (newLevel > level)
+                {
+                    for (int i = level + 1; i <= newLevel; i++)
+                    {
+                        update[i] = head;
+                    }
+                    level = newLevel;
+                }
+
+                Node<K, V> *newNode = new Node<K, V>(newLevel, key, value);
+                for (int i = 0; i <= newLevel; i++)
+                {
+                    newNode->next[i].store(update[i]->next[i].load());
+                    update[i]->next[i].store(newNode);
+                }
+            }
+        }
+
+        V pop(K key)
+        {
+            std::vector<Node<K, V>*> update(head->next.size());
+            Node<K, V> *curr = head;
+
+            for (int i = level; i >= 0; i--)
+            {
+                while (curr->next[i].load() != nullptr &&
+                       curr->next[i].load()->key < key)
+                {
+                    curr = curr->next[i].load();
+                }
+                update[i] = curr;
+            }
+
+            Node<K, V> *nextNode = curr->next[0].load();
+            if (nextNode != nullptr && nextNode->key == key)
+            {
+                for (int i = 0; i <= level; i++)
+                {
+                    if (update[i]->next[i].load() != nextNode)
+                    {
+                        break;
+                    }
+                    update[i]->next[i].store(nextNode->next[i].load());
+                }
+                while (level > 0 && head->next[level].load() == nullptr)
                 {
                     level--;
                 }
-                return data;
+                V value = nextNode->value;
+                delete nextNode;
+                return value;
             }
-            curr = curr->next[0].load();
+            return V();
         }
-    }
 
-private:
-    std::atomic<Node<T>*> head;
-    int level;
-    RandomNumberGenerator randomNumberGenerator;
+        int randomLevel()
+        {
+            int lvl = 0;
+            while (((double)rand() / RAND_MAX < 0.5) && lvl < head->next.size() - 1)
+            {
+                lvl++;
+            }
+            return lvl;
+        }
+
+    private:
+        Node<K, V> *head;
+        int level;
 };
