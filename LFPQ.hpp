@@ -1,15 +1,17 @@
-#include <atomic>
+#include <iostream>
 #include <vector>
+#include <atomic>
 
 template <typename K, typename V>
-class Node
+class SkipListNode
 {
-    public:
+    private:
         K key;
         V value;
-        std::vector<std::atomic<Node<K, V>*>> next;
+        std::vector<std::atomic<SkipListNode<K, V> *>> next;
 
-        Node(int level, K key, V value)
+    public:
+        SkipListNode(int level, K key, V value)
             : key(key), value(value), next(level + 1)
         {
             for (int i = 0; i <= level; i++)
@@ -17,51 +19,54 @@ class Node
                 next[i].store(nullptr);
             }
         }
+
+        K getKey()
+        {
+            return key;
+        }
+
+        V getValue()
+        {
+            return value;
+        }
 };
 
 template <typename K, typename V>
 class SkipList
 {
     public:
-        SkipList(int maxLevel)
-            : head(new Node<K, V>(maxLevel, K(), V())), level(0)
+        SkipList()
         {
-            for (int i = 0; i <= maxLevel; i++)
-            {
-                head->next[i].store(nullptr);
-            }
+            level = 0;
+            head = new SkipListNode<K, V>(level, K(), V());
         }
 
         void insert(K key, V value)
         {
-            std::vector<Node<K, V>*> update(head->next.size());
-            Node<K, V> *curr = head;
-
+            std::vector<std::atomic<SkipListNode<K, V> *>> update(head->next.size());
+            SkipListNode<K, V> *current = head;
             for (int i = level; i >= 0; i--)
             {
-                while (curr->next[i].load() != nullptr &&
-                       curr->next[i].load()->key < key)
+                while (current->next[i].load() && current->next[i].load()->key < key)
                 {
-                    curr = curr->next[i].load();
+                    current = current->next[i].load();
                 }
-                update[i] = curr;
+                update[i] = current;
             }
-
-            Node<K, V> *nextNode = curr->next[0].load();
-            if (nextNode == nullptr || nextNode->key != key)
+            current = current->next[0].load();
+            if (current == nullptr || current->key != key)
             {
-                int newLevel = randomLevel();
-                if (newLevel > level)
+                int lvl = randomLevel();
+                if (lvl > level)
                 {
-                    for (int i = level + 1; i <= newLevel; i++)
+                    for (int i = level + 1; i <= lvl; i++)
                     {
                         update[i] = head;
                     }
-                    level = newLevel;
+                    level = lvl;
                 }
-
-                Node<K, V> *newNode = new Node<K, V>(newLevel, key, value);
-                for (int i = 0; i <= newLevel; i++)
+                SkipListNode<K, V> *newNode = new SkipListNode<K, V>(lvl, key, value);
+                for (int i = 0; i <= lvl; i++)
                 {
                     newNode->next[i].store(update[i]->next[i].load());
                     update[i]->next[i].store(newNode);
@@ -69,38 +74,36 @@ class SkipList
             }
         }
 
-        V pop(K key)
+        V remove(K key)
         {
-            std::vector<Node<K, V>*> update(head->next.size());
-            Node<K, V> *curr = head;
-
+            std::vector<std::atomic<SkipListNode<K, V> *>> update(head->next.size());
+            SkipListNode<K, V> *current = head;
             for (int i = level; i >= 0; i--)
             {
-                while (curr->next[i].load() != nullptr &&
-                       curr->next[i].load()->key < key)
+                while (current->next[i].load() && current->next[i].load()->key < key)
                 {
-                    curr = curr->next[i].load();
+                    current = current->next[i].load();
                 }
-                update[i] = curr;
+                update[i] = current;
             }
-
-            Node<K, V> *nextNode = curr->next[0].load();
-            if (nextNode != nullptr && nextNode->key == key)
+            current = current->next[0].load();
+            if (current != nullptr && current->key == key)
             {
+                SkipListNode<K, V> *nextNode = current->next[0].load();
                 for (int i = 0; i <= level; i++)
                 {
-                    if (update[i]->next[i].load() != nextNode)
+                    if (update[i]->next[i].load() != current)
                     {
                         break;
                     }
-                    update[i]->next[i].store(nextNode->next[i].load());
+                    update[i]->next[i].store(nextNode);
                 }
+                V value = current->value;
+                delete current;
                 while (level > 0 && head->next[level].load() == nullptr)
                 {
                     level--;
                 }
-                V value = nextNode->value;
-                delete nextNode;
                 return value;
             }
             return V();
@@ -109,14 +112,14 @@ class SkipList
         int randomLevel()
         {
             int lvl = 0;
-            while (((double)rand() / RAND_MAX < 0.5) && lvl < head->next.size() - 1)
+            while (rand() < RAND_MAX / 2 && lvl < maxLevel)
             {
                 lvl++;
             }
             return lvl;
         }
 
-    private:
-        Node<K, V> *head;
+        const int maxLevel = 16;
         int level;
+        SkipListNode<K, V> *head;
 };
