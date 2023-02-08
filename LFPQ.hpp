@@ -1,6 +1,6 @@
-#include <iostream>
 #include <vector>
 #include <atomic>
+#include <random>
 
 template <typename K, typename V>
 class SkipListNode
@@ -34,18 +34,23 @@ class SkipListNode
 template <typename K, typename V>
 class SkipList
 {
+    private:
+        const int maxLevel = 16;
+        std::atomic<int> level;
+        SkipListNode<K, V> *head;
+
     public:
         SkipList()
         {
-            level = 0;
+            this->level = 0;
             head = new SkipListNode<K, V>(level, K(), V());
         }
 
         void Push(K key, V value)
         {
-            std::vector<std::atomic<SkipListNode<K, V> *>> update(head->next.size());
-            SkipListNode<K, V> *current = head;
-            for (int i = level; i >= 0; i--)
+            std::vector<std::atomic<SkipListNode<K, V>*>> update(this->head->next.size());
+            SkipListNode<K, V> *current = this->head;
+            for (int i = this->level; i >= 0; i--)
             {
                 while (current->next[i].load() && current->next[i].load()->key < key)
                 {
@@ -57,13 +62,13 @@ class SkipList
             if (current == nullptr || current->key != key)
             {
                 int lvl = randomLevel();
-                if (lvl > level)
+                if (lvl > this->level)
                 {
-                    for (int i = level + 1; i <= lvl; i++)
+                    for (int i = this->level + 1; i <= lvl; i++)
                     {
-                        update[i] = head;
+                        update[i] = this->head;
                     }
-                    level = lvl;
+                    this->level = lvl;
                 }
                 SkipListNode<K, V> *newNode = new SkipListNode<K, V>(lvl, key, value);
                 for (int i = 0; i <= lvl; i++)
@@ -76,35 +81,28 @@ class SkipList
 
         V Pop()
         {
-            SkipListNode<K, V> *current = head;
-            SkipListNode<K, V> *update[maxLevel + 1];
-            memset(update, 0, sizeof(SkipListNode<K, V> *) * (maxLevel + 1));
-            for (int i = level; i >= 0; i--)
-            {
-                while (current->next[i].load() && current->next[i].load()->key <= key)
-                {
-                    current = current->next[i].load();
-                }
-                update[i] = current;
-            }
-
-            current = current->next[0].load();
+            SkipListNode<K, V> *current = this->head->next[0].load();
             if (current)
             {
-                SkipListNode<K, V> *nextNode = current->next[0].load();
-                for (int i = 0; i <= level; i++)
+                std::vector<std::atomic<SkipListNode<K, V>*>> update(this->head->next.size());
+                for (int i = this->level; i >= 0; i--)
                 {
-                    if (update[i]->next[i].load() != current)
+                    while (current->next[i].load() && current->next[i].load()->key)
                     {
-                        break;
+                        current = current->next[i].load();
                     }
-                    update[i]->next[i].store(nextNode);
+                    update[i] = current;
+                }
+                current = current->next[0].load();
+                for (int i = 0; i <= this->level; i++)
+                {
+                    update[i]->next[i].store(current->next[i].load());
                 }
                 V value = current->value;
                 delete current;
-                while (level > 0 && head->next[level].load() == nullptr)
+                while (this->level > 0 && this->head->next[this->level].load() == nullptr)
                 {
-                    level--;
+                    this->level--;
                 }
                 return value;
             }
@@ -113,15 +111,14 @@ class SkipList
 
         int randomLevel()
         {
+            static std::mt19937 eng(std::random_device{}());
+            static std::uniform_int_distribution<int> dist(0, 1);
+
             int lvl = 0;
-            while (rand() < RAND_MAX / 2 && lvl < maxLevel)
+            while (dist(eng) == 0 && lvl < maxLevel)
             {
                 lvl++;
             }
             return lvl;
         }
-
-        const int maxLevel = 16;
-        int level;
-        SkipListNode<K, V> *head;
 };
