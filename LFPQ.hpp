@@ -8,7 +8,7 @@ class SkipListNode
     private:
         K key;
         V value;
-        std::vector<std::atomic<SkipListNode<K, V> *>> next;
+        std::vector<std::atomic<SkipListNode<K, V>*>> next;
 
     public:
         SkipListNode(int level, K key, V value)
@@ -16,18 +16,18 @@ class SkipListNode
         {
             for (int i = 0; i <= level; i++)
             {
-                next[i].store(nullptr);
+                this->next[i].store(nullptr);
             }
         }
 
-        K getKey()
+        K GetKey()
         {
-            return key;
+            return this->key;
         }
 
-        V getValue()
+        V GetValue()
         {
-            return value;
+            return this->value;
         }
 };
 
@@ -41,7 +41,7 @@ class SkipList
             head = new SkipListNode<K, V>(level, K(), V());
         }
 
-        void insert(K key, V value)
+        void Push(K key, V value)
         {
             std::vector<std::atomic<SkipListNode<K, V> *>> update(head->next.size());
             SkipListNode<K, V> *current = head;
@@ -74,20 +74,22 @@ class SkipList
             }
         }
 
-        V remove(K key)
+        V Pop()
         {
-            std::vector<std::atomic<SkipListNode<K, V> *>> update(head->next.size());
             SkipListNode<K, V> *current = head;
+            SkipListNode<K, V> *update[maxLevel + 1];
+            memset(update, 0, sizeof(SkipListNode<K, V> *) * (maxLevel + 1));
             for (int i = level; i >= 0; i--)
             {
-                while (current->next[i].load() && current->next[i].load()->key < key)
+                while (current->next[i].load() && current->next[i].load()->key <= key)
                 {
                     current = current->next[i].load();
                 }
                 update[i] = current;
             }
+
             current = current->next[0].load();
-            if (current != nullptr && current->key == key)
+            if (current)
             {
                 SkipListNode<K, V> *nextNode = current->next[0].load();
                 for (int i = 0; i <= level; i++)
