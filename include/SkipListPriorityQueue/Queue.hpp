@@ -65,8 +65,8 @@ namespace SLPQ
                 for (int i = 0; i <= new_level; i++)
                 {
                     predecessors[i]->Lock();
-                    new_node->next[i] = predecessors[i]->next[i];
-                    predecessors[i]->next[i] = new_node;
+                    new_node->GetNext()[i] = predecessors[i]->GetNext(i);
+                    predecessors[i]->GetNext()[i] = new_node;
                     predecessors[i]->Unlock();
                 }
             }
