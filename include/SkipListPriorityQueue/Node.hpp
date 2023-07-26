@@ -3,10 +3,11 @@
 
 #include <vector>
 #include <mutex>
+#include "Concepts.hpp"
 
 namespace SLPQ
 {
-    template<typename K, typename V>
+    template<KeyType K, ValueType V>
     class Node
     {
         private:
@@ -16,7 +17,18 @@ namespace SLPQ
             std::mutex mutex;
 
         public:
-            Node(K& priority, V& data, int level) : priority(priority), data(data), next(level, nullptr)
+            Node(const K& priority, int level) requires std::is_default_constructible_v<V> : priority(priority), data(V()),
+            next(level, nullptr)
+            {
+            }
+
+            Node(const K& priority, const V& value, int level) requires OnlyMoveConstructible<V> : priority(priority),
+            data(std::move(value)), next(level, nullptr)
+            {
+            }
+
+            Node(const K& priority, const V& value, int level) requires OnlyCopyConstructible<V> : priority(priority),
+            data(value), next(level, nullptr)
             {
             }
 
