@@ -4,14 +4,13 @@
 #include <vector>
 #include <random>
 #include <mutex>
-#include <concepts>
 
+#include "Concepts.hpp"
 #include "Node.hpp"
 
 namespace SLPQ
 {
-    template<typename K, typename V>
-    requires std::totally_ordered<K>
+    template<KeyType K, ValueType V>
     class Queue
     {
         private:
@@ -22,31 +21,33 @@ namespace SLPQ
             {
                 static std::random_device rd;
                 static std::mt19937 mt(rd());
-                static std::uniform_int_distribution<int> dist(0, this->max_level - 1);
+                static std::uniform_int_distribution<int> dist(1, this->max_level);
 
                 return dist(mt);
             }
 
         public:
-            Queue(int max_level = 32) : max_level(max_level), head(new Node<K, V>(K(), V(), max_level)) {}
+            Queue(int max_level = 32) : max_level(max_level), head(new Node<K, V>(K(), max_level)) {}
             
             ~Queue()
             {
-                Node<K, V> *current = head->GetNext(0), *tmp;
+                Node<K, V>* current = this->head;
                 while (current != nullptr)
                 {
-                    tmp = current->GetNext(0);
+                    Node<K, V>* tmp = current->GetNext(0);
                     delete current;
                     current = tmp;
                 }
-                delete head;
             }
 
-            void Push(K priority, V data)
+            void Push(const K& priority)
             {
+                int new_level = this->GenerateRandomLevel();
+                auto new_node = new Node<K, V>(priority, new_level);
+
                 Node<K, V>* current = this->head;
-                std::vector<Node<K, V>*> predecessors(this->max_level, nullptr);
-                for (int i = this->max_level - 1; i >= 0; i--)
+                std::vector<Node<K, V>*> predecessors(new_level, nullptr);
+                for (int i = new_level - 1; i >= 0; i--)
                 {
                     current->Lock();
                     while (current->GetNext(i) != nullptr && current->GetNext(i)->GetPriority() < priority)
@@ -60,9 +61,37 @@ namespace SLPQ
                     predecessors[i] = current;
                 }
 
+                for (int i = 0; i < new_level; i++)
+                {
+                    predecessors[i]->Lock();
+                    new_node->GetNext()[i] = predecessors[i]->GetNext(i);
+                    predecessors[i]->GetNext()[i] = new_node;
+                    predecessors[i]->Unlock();
+                }
+            }
+
+            void Push(const K& priority, const V& data)
+            {
                 int new_level = this->GenerateRandomLevel();
-                Node<K, V>* new_node = new Node<K, V>(priority, data, new_level);
-                for (int i = 0; i <= new_level; i++)
+                auto new_node = new Node<K, V>(priority, data, new_level);
+
+                Node<K, V>* current = this->head;
+                std::vector<Node<K, V>*> predecessors(new_level, nullptr);
+                for (int i = new_level - 1; i >= 0; i--)
+                {
+                    current->Lock();
+                    while (current->GetNext(i) != nullptr && current->GetNext(i)->GetPriority() < priority)
+                    {
+                        Node<K, V>* tmp = current->GetNext(i);
+                        current->Unlock();
+                        current = tmp;
+                        current->Lock();
+                    }
+                    current->Unlock();
+                    predecessors[i] = current;
+                }
+
+                for (int i = 0; i < new_level; i++)
                 {
                     predecessors[i]->Lock();
                     new_node->GetNext()[i] = predecessors[i]->GetNext(i);
@@ -73,9 +102,9 @@ namespace SLPQ
 
             bool TryPop(K& priority, V& data)
             {
-                this->head.Lock();
+                this->head->Lock();
                 Node<K, V>* current = this->head->GetNext(0);
-                this->head.Unlock();
+                this->head->Unlock();
 
                 if (current == nullptr)
                 {
@@ -91,7 +120,7 @@ namespace SLPQ
 
                     this->head->Lock();
                     this->head->GetNext()[0] = tmp;
-                    this->head.Unlock();
+                    this->head->Unlock();
                     delete current;
                     return true;
                 }
