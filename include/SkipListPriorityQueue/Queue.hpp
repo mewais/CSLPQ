@@ -3,7 +3,7 @@
 
 #include <vector>
 #include <random>
-#include <mutex>
+#include <shared_mutex>
 
 #include "Concepts.hpp"
 #include "Node.hpp"
@@ -16,6 +16,7 @@ namespace SLPQ
         private:
             int max_level;
             Node<K, V>* head;
+            std::shared_mutex mutex;
             
             int GenerateRandomLevel()
             {
@@ -44,84 +45,81 @@ namespace SLPQ
             {
                 int new_level = this->GenerateRandomLevel();
                 auto new_node = new Node<K, V>(priority, new_level);
-
-                Node<K, V>* current = this->head;
                 std::vector<Node<K, V>*> predecessors(new_level, nullptr);
+                Node<K, V>* current = this->head;
+
+                // Find predecessors
+                this->mutex.lock_shared();
                 for (int i = new_level - 1; i >= 0; i--)
                 {
-                    current->Lock();
                     while (current->GetNext(i) != nullptr && current->GetNext(i)->GetPriority() < priority)
                     {
                         Node<K, V>* tmp = current->GetNext(i);
-                        current->Unlock();
                         current = tmp;
-                        current->Lock();
                     }
-                    current->Unlock();
                     predecessors[i] = current;
                 }
+                this->mutex.unlock_shared();
 
+                // Insert new node
+                this->mutex.lock();
                 for (int i = 0; i < new_level; i++)
                 {
-                    predecessors[i]->Lock();
                     new_node->GetNext()[i] = predecessors[i]->GetNext(i);
                     predecessors[i]->GetNext()[i] = new_node;
-                    predecessors[i]->Unlock();
                 }
+                this->mutex.unlock();
             }
 
             void Push(const K& priority, const V& data)
             {
                 int new_level = this->GenerateRandomLevel();
                 auto new_node = new Node<K, V>(priority, data, new_level);
-
-                Node<K, V>* current = this->head;
                 std::vector<Node<K, V>*> predecessors(new_level, nullptr);
+                Node<K, V>* current = this->head;
+
+                // Find predecessors
+                this->mutex.lock_shared();
                 for (int i = new_level - 1; i >= 0; i--)
                 {
-                    current->Lock();
                     while (current->GetNext(i) != nullptr && current->GetNext(i)->GetPriority() < priority)
                     {
                         Node<K, V>* tmp = current->GetNext(i);
-                        current->Unlock();
                         current = tmp;
-                        current->Lock();
                     }
-                    current->Unlock();
                     predecessors[i] = current;
                 }
+                this->mutex.unlock_shared();
 
+                // Insert new node
+                this->mutex.lock();
                 for (int i = 0; i < new_level; i++)
                 {
-                    predecessors[i]->Lock();
                     new_node->GetNext()[i] = predecessors[i]->GetNext(i);
                     predecessors[i]->GetNext()[i] = new_node;
-                    predecessors[i]->Unlock();
                 }
+                this->mutex.unlock();
             }
 
             bool TryPop(K& priority, V& data)
             {
-                this->head->Lock();
+                this->mutex.lock();
                 Node<K, V>* current = this->head->GetNext(0);
-                this->head->Unlock();
 
                 if (current == nullptr)
                 {
+                    this->mutex.unlock();
                     return false;
                 }
                 else
                 {
-                    current->Lock();
                     priority = current->GetPriority();
                     data = current->GetData();
                     Node<K, V>* tmp = current->GetNext(0);
-                    current->Unlock();
 
-                    this->head->Lock();
                     this->head->GetNext()[0] = tmp;
-                    this->head->Unlock();
                     delete current;
+                    this->mutex.unlock();
                     return true;
                 }
             }

@@ -2,7 +2,7 @@
 #define __SLPQ_NODE_HPP__
 
 #include <vector>
-#include <mutex>
+
 #include "Concepts.hpp"
 
 namespace SLPQ
@@ -14,7 +14,6 @@ namespace SLPQ
             K priority;
             V data;
             std::vector<Node<K, V>*> next;
-            std::mutex mutex;
 
         public:
             Node(const K& priority, int level) requires std::is_default_constructible_v<V> : priority(priority), data(V()),
@@ -50,16 +49,6 @@ namespace SLPQ
             V GetData()
             {
                 return this->data;
-            }
-
-            void Lock()
-            {
-                this->mutex.lock();
-            }
-
-            void Unlock()
-            {
-                this->mutex.unlock();
             }
     };
 }
