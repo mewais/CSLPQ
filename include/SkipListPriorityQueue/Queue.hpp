@@ -1,23 +1,24 @@
-#ifndef __SLPQ_QUEUE_HPP__
-#define __SLPQ_QUEUE_HPP__
+#ifndef __CSLPQ_QUEUE_HPP__
+#define __CSLPQ_QUEUE_HPP__
 
 #include <vector>
 #include <random>
+#include <tuple>
 #include <shared_mutex>
+#include <sstream>
 
 #include "Concepts.hpp"
 #include "Node.hpp"
 
-namespace SLPQ
+namespace CSLPQ
 {
     template<KeyType K, ValueType V>
     class Queue
     {
         private:
-            int max_level;
+            const int max_level;
             Node<K, V>* head;
-            std::shared_mutex mutex;
-            
+
             int GenerateRandomLevel()
             {
                 static std::random_device rd;
@@ -27,15 +28,78 @@ namespace SLPQ
                 return dist(mt);
             }
 
+            void FindLastOfPriority(const K& priority, std::vector<Node<K, V>*>& predecessors,
+                                    std::vector<Node<K, V>*>& successors)
+            {
+                bool marked = false;
+                bool snip = false;
+
+                Node<K, V>* predecessor = nullptr;
+                Node<K, V>* current = nullptr;
+                Node<K, V>* successor = nullptr;
+
+                bool retry;
+                while (true)
+                {
+                    retry = false;
+                    predecessor = this->head;
+                    for (auto level = this->max_level; level >= 0; --level)
+                    {
+                        current = predecessor->GetNext(level).GetPointer();
+                        while (current)
+                        {
+                            std::tie(successor, marked) = current->GetNext(level).GetPointerAndMark();
+                            while (marked)
+                            {
+                                snip = predecessor->GetNext(level).CompareExchange(current, false, successor, false);
+                                if (!snip)
+                                {
+                                    retry = true;
+                                    break;
+                                }
+                                current = predecessor->GetNext(level).GetPointer();
+                                std::tie(successor, marked) = current->GetNext(level).GetPointerAndMark();
+                            }
+                            if (retry)
+                            {
+                                break;
+                            }
+                            if (current->GetPriority() <= priority)
+                            {
+                                predecessor = current;
+                                current = successor;
+                            }
+                            else
+                            {
+                                break;
+                            }
+                        }
+                        if (retry)
+                        {
+                            break;
+                        }
+                        predecessors[level] = predecessor;
+                        successors[level] = current;
+                    }
+                    if (!retry)
+                    {
+                        break;
+                    }
+                }
+            }
+
         public:
-            Queue(int max_level = 32) : max_level(max_level), head(new Node<K, V>(K(), max_level)) {}
+            Queue(int max_level = 32) : max_level(max_level)
+            {
+                this->head = new Node<K, V>(K(), max_level + 1);
+            }
             
             ~Queue()
             {
                 Node<K, V>* current = this->head;
                 while (current != nullptr)
                 {
-                    Node<K, V>* tmp = current->GetNext(0);
+                    Node<K, V>* tmp = current->GetNext(0).GetPointer();
                     delete current;
                     current = tmp;
                 }
@@ -45,85 +109,137 @@ namespace SLPQ
             {
                 int new_level = this->GenerateRandomLevel();
                 auto new_node = new Node<K, V>(priority, new_level);
-                std::vector<Node<K, V>*> predecessors(new_level, nullptr);
-                Node<K, V>* current = this->head;
+                std::vector<Node<K, V>*> predecessors(this->max_level + 1, nullptr);
+                std::vector<Node<K, V>*> successors(this->max_level + 1, nullptr);
 
-                // Find predecessors
-                this->mutex.lock_shared();
-                for (int i = new_level - 1; i >= 0; i--)
+                while (true)
                 {
-                    while (current->GetNext(i) != nullptr && current->GetNext(i)->GetPriority() < priority)
+                    this->FindLastOfPriority(priority, predecessors, successors);
+                    for (auto level = 0; level < new_level; ++level)
                     {
-                        Node<K, V>* tmp = current->GetNext(i);
-                        current = tmp;
+                        new_node->SetNext(level, successors[level]);
                     }
-                    predecessors[i] = current;
+                    auto predecessor = predecessors[0];
+                    auto successor = successors[0];
+                    new_node->SetNext(0, successor);
+                    if (!predecessor->GetNext(0).CompareExchange(successor, false, new_node, false))
+                    {
+                        continue;
+                    }
+                    for (auto level = 1; level < new_level; ++level)
+                    {
+                        while (true)
+                        {
+                            predecessor = predecessors[level];
+                            successor = successors[level];
+                            if (predecessor->GetNext(level).CompareExchange(successor, false, new_node, false))
+                            {
+                                break;
+                            }
+                            this->FindLastOfPriority(priority, predecessors, successors);
+                        }
+                    }
+                    break;
                 }
-                this->mutex.unlock_shared();
-
-                // Insert new node
-                this->mutex.lock();
-                for (int i = 0; i < new_level; i++)
-                {
-                    new_node->GetNext()[i] = predecessors[i]->GetNext(i);
-                    predecessors[i]->GetNext()[i] = new_node;
-                }
-                this->mutex.unlock();
             }
 
             void Push(const K& priority, const V& data)
             {
                 int new_level = this->GenerateRandomLevel();
                 auto new_node = new Node<K, V>(priority, data, new_level);
-                std::vector<Node<K, V>*> predecessors(new_level, nullptr);
-                Node<K, V>* current = this->head;
+                std::vector<Node<K, V>*> predecessors(this->max_level + 1, nullptr);
+                std::vector<Node<K, V>*> successors(this->max_level + 1, nullptr);
 
-                // Find predecessors
-                this->mutex.lock_shared();
-                for (int i = new_level - 1; i >= 0; i--)
+                while (true)
                 {
-                    while (current->GetNext(i) != nullptr && current->GetNext(i)->GetPriority() < priority)
+                    this->FindLastOfPriority(priority, predecessors, successors);
+                    for (auto level = 0; level < new_level; ++level)
                     {
-                        Node<K, V>* tmp = current->GetNext(i);
-                        current = tmp;
+                        new_node->SetNext(level, successors[level]);
                     }
-                    predecessors[i] = current;
+                    auto predecessor = predecessors[0];
+                    auto successor = successors[0];
+                    new_node->SetNext(0, successor);
+                    if (!predecessor->GetNext(0).CompareExchange(successor, false, new_node, false))
+                    {
+                        continue;
+                    }
+                    for (auto level = 1; level < new_level; ++level)
+                    {
+                        while (true)
+                        {
+                            predecessor = predecessors[level];
+                            successor = successors[level];
+                            if (predecessor->GetNext(level).CompareExchange(successor, false, new_node, false))
+                            {
+                                break;
+                            }
+                            this->FindLastOfPriority(priority, predecessors, successors);
+                        }
+                    }
+                    break;
                 }
-                this->mutex.unlock_shared();
-
-                // Insert new node
-                this->mutex.lock();
-                for (int i = 0; i < new_level; i++)
-                {
-                    new_node->GetNext()[i] = predecessors[i]->GetNext(i);
-                    predecessors[i]->GetNext()[i] = new_node;
-                }
-                this->mutex.unlock();
             }
 
             bool TryPop(K& priority, V& data)
             {
-                this->mutex.lock();
-                Node<K, V>* current = this->head->GetNext(0);
+                std::vector<Node<K, V>*> successors(this->max_level + 1, nullptr);
+                Node<K, V>* successor;
+                Node<K, V>* first = this->head->GetNext(0).GetPointer();
 
-                if (current == nullptr)
+                bool marked = false;
+                for (int level = first->GetLevel() - 1; level >= 1; --level)
                 {
-                    this->mutex.unlock();
-                    return false;
+                    std::tie(successor, marked) = first->GetNext(level).GetPointerAndMark();
+                    while (!marked)
+                    {
+                        first->GetNext(level).SetMark();
+                        std::tie(successor, marked) = first->GetNext(level).GetPointerAndMark();
+                    }
                 }
-                else
-                {
-                    priority = current->GetPriority();
-                    data = current->GetData();
-                    Node<K, V>* tmp = current->GetNext(0);
 
-                    this->head->GetNext()[0] = tmp;
-                    delete current;
-                    this->mutex.unlock();
-                    return true;
+                marked = false;
+                std::tie(successor, marked) = first->GetNext(0).GetPointerAndMark();
+                while (true)
+                {
+                    bool success = first->GetNext(0).CompareExchange(successor, false, successor, true);
+                    std::tie(successor, marked) = successor->GetNext(0).GetPointerAndMark();
+                    if (success)
+                    {
+                        priority = successor->GetPriority();
+                        data = successor->GetData();
+                        return true;
+                    }
+                    else if (marked)
+                    {
+                        return false;
+                    }
                 }
+            }
+
+            std::string ToString() requires Printable<K> && Printable<V>
+            {
+                std::stringstream ss;
+                ss << "Queue: \n";
+
+                bool marked = false;
+                Node<K, V>* node;
+                std::tie(node, marked) = this->head->GetNext(0).GetPointerAndMark();
+                while (node)
+                {
+                    if (!marked)
+                    {
+                        ss << "\tKey: " << node->GetPriority() << ", Value: " << node->GetData() << "\n";
+                    }
+                    else
+                    {
+                        ss << "\tKey: " << node->GetPriority() << ", Value: " << node->GetData() << " (marked)\n";
+                    }
+                    std::tie(node, marked) = node->GetNext(0).GetPointerAndMark();
+                }
+                return ss.str();
             }
     };
 }
 
-#endif // __SLPQ_QUEUE_HPP__
+#endif // __CSLPQ_QUEUE_HPP__

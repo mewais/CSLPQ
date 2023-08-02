@@ -7,6 +7,12 @@
 namespace CSLPQ
 {
     template <class T>
+    concept Printable = requires(std::stringstream& os, T a)
+    {
+        os << a;
+    };
+
+    template <class T>
     concept OnlyMoveConstructible = std::is_move_constructible_v<T> && !std::is_fundamental_v<T>;
 
     template <class T>

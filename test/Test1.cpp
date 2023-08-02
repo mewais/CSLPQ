@@ -5,39 +5,45 @@
 
 int main()
 {
-    SLPQ::Queue<std::pair<uint64_t, uint64_t>, void*> queue;
-    queue.Push(std::make_pair(11, 2), (void*)5);
-    queue.Push(std::make_pair(10, 2), (void*)1);
-    queue.Push(std::make_pair(12, 1), (void*)8);
-    queue.Push(std::make_pair(13, 3), (void*)15);
-    queue.Push(std::make_pair(12, 4), (void*)11);
-    queue.Push(std::make_pair(14, 1), (void*)16);
-    queue.Push(std::make_pair(12, 3), (void*)10);
-    queue.Push(std::make_pair(11, 3), (void*)6);
-    queue.Push(std::make_pair(10, 3), (void*)2);
-    queue.Push(std::make_pair(15, 4), (void*)23);
-    queue.Push(std::make_pair(14, 2), (void*)17);
-    queue.Push(std::make_pair(11, 1), (void*)4);
-    queue.Push(std::make_pair(15, 3), (void*)22);
-    queue.Push(std::make_pair(14, 3), (void*)18);
-    queue.Push(std::make_pair(12, 5), (void*)12);
-    queue.Push(std::make_pair(10, 1));
-    queue.Push(std::make_pair(15, 2), (void*)21);
-    queue.Push(std::make_pair(15, 1), (void*)20);
-    queue.Push(std::make_pair(12, 2), (void*)9);
-    queue.Push(std::make_pair(11, 4), (void*)7);
-    queue.Push(std::make_pair(13, 1), (void*)13);
-    queue.Push(std::make_pair(10, 4), (void*)3);
-    queue.Push(std::make_pair(13, 2), (void*)14);
-    queue.Push(std::make_pair(14, 4), (void*)19);
+    CSLPQ::Queue<uint64_t, void*> queue;
+    queue.Push(112, (void*)5);
+    std::cout << "First " << queue.ToString();
+    queue.Push(102, (void*)1);
+    std::cout << "Second " << queue.ToString();
+    queue.Push(121, (void*)8);
+    std::cout << "Third " << queue.ToString();
+    queue.Push(133, (void*)15);
+    std::cout << "Fourth " << queue.ToString();
+    queue.Push(124, (void*)11);
+    queue.Push(141, (void*)16);
+    queue.Push(123, (void*)10);
+    queue.Push(113, (void*)6);
+    queue.Push(103, (void*)2);
+    queue.Push(154, (void*)23);
+    queue.Push(142, (void*)17);
+    queue.Push(111, (void*)4);
+    queue.Push(153, (void*)22);
+    queue.Push(143, (void*)18);
+    queue.Push(125, (void*)12);
+    queue.Push(101);
+    queue.Push(152, (void*)21);
+    queue.Push(151, (void*)20);
+    queue.Push(122, (void*)9);
+    queue.Push(114, (void*)7);
+    queue.Push(131, (void*)13);
+    queue.Push(104, (void*)3);
+    queue.Push(101, (void*)0x10000);
+    queue.Push(132, (void*)14);
+    queue.Push(144, (void*)19);
+    std::cout << "End " << queue.ToString() << "\n";
 
     while (true)
     {
-        std::pair<uint64_t, uint64_t> key;
+        uint64_t key;
         void* value;
         if (queue.TryPop(key, value))
         {
-            std::cout << key.first << ", " << key.second << ": " << value << std::endl;
+            std::cout << key << ": " << value << std::endl;
         }
         else
         {
