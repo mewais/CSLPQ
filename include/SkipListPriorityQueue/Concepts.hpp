@@ -1,10 +1,10 @@
-#ifndef __SLPQ_CONCEPT_HPP__
-#define __SLPQ_CONCEPT_HPP__
+#ifndef __CSLPQ_CONCEPT_HPP__
+#define __CSLPQ_CONCEPT_HPP__
 
 #include <concepts>
 #include <type_traits>
 
-namespace SLPQ
+namespace CSLPQ
 {
     template <class T>
     concept OnlyMoveConstructible = std::is_move_constructible_v<T> && !std::is_fundamental_v<T>;
@@ -20,4 +20,4 @@ namespace SLPQ
                          std::is_default_constructible_v<T> || std::is_fundamental_v<T>);
 }
 
-#endif //__SLPQ_CONCEPT_HPP__
+#endif //__CSLPQ_CONCEPT_HPP__
