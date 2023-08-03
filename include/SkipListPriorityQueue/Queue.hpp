@@ -23,7 +23,7 @@ namespace CSLPQ
             {
                 static std::random_device rd;
                 static std::mt19937 mt(rd());
-                static std::uniform_int_distribution<int> dist(1, this->max_level);
+                static std::uniform_int_distribution<int> dist(1, this->max_level + 1);
 
                 return dist(mt);
             }
@@ -96,6 +96,62 @@ namespace CSLPQ
                     if (!retry)
                     {
                         break;
+                    }
+                }
+            }
+
+            Node<K, V>* FindFirst()
+            {
+                bool marked = false;
+                bool snip = false;
+
+                Node<K, V>* predecessor = nullptr;
+                Node<K, V>* current = nullptr;
+                Node<K, V>* successor = nullptr;
+
+                bool retry;
+                while (true)
+                {
+                    retry = false;
+                    predecessor = this->head;
+                    for (auto level = this->max_level; level >= 0; --level)
+                    {
+                        current = predecessor->GetNext(level).GetPointer();
+                        if (current)
+                        {
+                            std::tie(successor, marked) = current->GetNext(level).GetPointerAndMark();
+                            while (marked)
+                            {
+                                snip = predecessor->GetNext(level).CompareExchange(current, false, successor, false);
+                                if (!snip)
+                                {
+                                    retry = true;
+                                    break;
+                                }
+                                current = predecessor->GetNext(level).GetPointer();
+                                if (current == nullptr)
+                                {
+                                    marked = false;
+                                    successor = nullptr;
+                                }
+                                else
+                                {
+                                    std::tie(successor, marked) = current->GetNext(level).GetPointerAndMark();
+                                }
+                            }
+                            if (retry)
+                            {
+                                break;
+                            }
+                            if (level == 0)
+                            {
+                                return current;
+                            }
+                        }
+                        else if (level == 0)
+                        {
+                            return nullptr;
+                        }
                     }
                 }
             }
@@ -195,10 +251,8 @@ namespace CSLPQ
 
             bool TryPop(K& priority, V& data)
             {
-                std::vector<Node<K, V>*> predecessors(this->max_level + 1, nullptr);
-                std::vector<Node<K, V>*> successors(this->max_level + 1, nullptr);
                 Node<K, V>* successor = nullptr;
-                Node<K, V>* first = this->head->GetNext(0).GetPointer();
+                Node<K, V>* first = this->FindFirst();
 
                 if (first == nullptr)
                 {
@@ -226,8 +280,6 @@ namespace CSLPQ
                     {
                         priority = successor->GetPriority();
                         data = successor->GetData();
-                        // Use the find function to delete marked
-                        this->FindLastOfPriority(priority, predecessors, successors);
                         return true;
                     }
                     else if (marked)
@@ -237,27 +289,38 @@ namespace CSLPQ
                 }
             }
 
-            std::string ToString() requires Printable<K> && Printable<V>
+            std::string ToString(bool all_levels = false) requires Printable<K> && Printable<V>
             {
                 std::stringstream ss;
-                ss << "Queue: \n";
-
-                bool marked = false;
-                Node<K, V>* node;
-                Node<K, V>* nnode;
-                std::tie(node, marked) = this->head->GetNext(0).GetPointerAndMark();
-                while (node)
+                int max = all_levels ? this->max_level : 0;
+                for (int level = 0; level <= max; ++level)
                 {
-                    std::tie(nnode, marked) = node->GetNext(0).GetPointerAndMark();
-                    if (!marked)
+                    if (all_levels)
                     {
-                        ss << "\tKey: " << node->GetPriority() << ", Value: " << node->GetData() << "\n";
+                        ss << "Queue at level " << level << ":\n";
                     }
                     else
                     {
-                        ss << "\tKey: " << node->GetPriority() << ", Value: " << node->GetData() << " (Marked)\n";
+                        ss << "Queue: \n";
                     }
-                    node = nnode;
+
+                    bool marked = false;
+                    Node<K, V>* node;
+                    Node<K, V>* nnode;
+                    std::tie(node, marked) = this->head->GetNext(level).GetPointerAndMark();
+                    while (node)
+                    {
+                        std::tie(nnode, marked) = node->GetNext(level).GetPointerAndMark();
+                        if (!marked)
+                        {
+                            ss << "\tKey: " << node->GetPriority() << ", Value: " << node->GetData() << "\n";
+                        }
+                        else
+                        {
+                            ss << "\tKey: " << node->GetPriority() << ", Value: " << node->GetData() << " (Marked)\n";
+                        }
+                        node = nnode;
+                    }
                 }
                 return ss.str();
             }
