@@ -58,13 +58,25 @@ namespace CSLPQ
                                     break;
                                 }
                                 current = predecessor->GetNext(level).GetPointer();
-                                std::tie(successor, marked) = current->GetNext(level).GetPointerAndMark();
+                                if (current == nullptr)
+                                {
+                                    marked = false;
+                                    successor = nullptr;
+                                }
+                                else
+                                {
+                                    std::tie(successor, marked) = current->GetNext(level).GetPointerAndMark();
+                                }
                             }
                             if (retry)
                             {
                                 break;
                             }
-                            if (current->GetPriority() <= priority)
+                            if (current == nullptr)
+                            {
+                                break;
+                            }
+                            if (current->GetPriority() < priority)
                             {
                                 predecessor = current;
                                 current = successor;
@@ -89,7 +101,7 @@ namespace CSLPQ
             }
 
         public:
-            Queue(int max_level = 32) : max_level(max_level)
+            Queue(int max_level = 4) : max_level(max_level)
             {
                 this->head = new Node<K, V>(K(), max_level + 1);
             }
@@ -183,9 +195,15 @@ namespace CSLPQ
 
             bool TryPop(K& priority, V& data)
             {
+                std::vector<Node<K, V>*> predecessors(this->max_level + 1, nullptr);
                 std::vector<Node<K, V>*> successors(this->max_level + 1, nullptr);
-                Node<K, V>* successor;
+                Node<K, V>* successor = nullptr;
                 Node<K, V>* first = this->head->GetNext(0).GetPointer();
+
+                if (first == nullptr)
+                {
+                    return false;
+                }
 
                 bool marked = false;
                 for (int level = first->GetLevel() - 1; level >= 1; --level)
@@ -203,11 +221,13 @@ namespace CSLPQ
                 while (true)
                 {
                     bool success = first->GetNext(0).CompareExchange(successor, false, successor, true);
-                    std::tie(successor, marked) = successor->GetNext(0).GetPointerAndMark();
+                    std::tie(successor, marked) = this->head->GetNext(0).GetPointerAndMark();
                     if (success)
                     {
                         priority = successor->GetPriority();
                         data = successor->GetData();
+                        // Use the find function to delete marked
+                        this->FindLastOfPriority(priority, predecessors, successors);
                         return true;
                     }
                     else if (marked)
@@ -224,18 +244,20 @@ namespace CSLPQ
 
                 bool marked = false;
                 Node<K, V>* node;
+                Node<K, V>* nnode;
                 std::tie(node, marked) = this->head->GetNext(0).GetPointerAndMark();
                 while (node)
                 {
+                    std::tie(nnode, marked) = node->GetNext(0).GetPointerAndMark();
                     if (!marked)
                     {
                         ss << "\tKey: " << node->GetPriority() << ", Value: " << node->GetData() << "\n";
                     }
                     else
                     {
-                        ss << "\tKey: " << node->GetPriority() << ", Value: " << node->GetData() << " (marked)\n";
+                        ss << "\tKey: " << node->GetPriority() << ", Value: " << node->GetData() << " (Marked)\n";
                     }
-                    std::tie(node, marked) = node->GetNext(0).GetPointerAndMark();
+                    node = nnode;
                 }
                 return ss.str();
             }

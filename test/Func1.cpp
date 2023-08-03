@@ -6,6 +6,20 @@
 int main()
 {
     CSLPQ::Queue<uint64_t, void*> queue;
+    while (true)
+    {
+        uint64_t key;
+        void* value;
+        if (queue.TryPop(key, value))
+        {
+            std::cout << "FAILURE: Read " << key << ": " << value << " from empty queue" << std::endl;
+        }
+        else
+        {
+            break;
+        }
+    }
+
     queue.Push(112, (void*)5);
     std::cout << "First " << queue.ToString();
     queue.Push(102, (void*)1);
