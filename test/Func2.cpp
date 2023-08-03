@@ -1,6 +1,5 @@
 #include <iostream>
 
-#include "SkipListPriorityQueue/Node.hpp"
 #include "SkipListPriorityQueue/Queue.hpp"
 
 int main()

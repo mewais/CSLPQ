@@ -1,6 +1,5 @@
 #include <iostream>
 
-#include "SkipListPriorityQueue/Node.hpp"
 #include "SkipListPriorityQueue/Queue.hpp"
 
 int main()
@@ -12,7 +11,8 @@ int main()
         void* value;
         if (queue.TryPop(key, value))
         {
-            std::cout << "FAILURE: Read " << key << ": " << value << " from empty queue" << std::endl;
+            std::cerr << "FAILURE: Read " << key << ": " << value << " from empty queue" << std::endl;
+            return 1;
         }
         else
         {
