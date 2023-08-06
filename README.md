@@ -4,9 +4,7 @@ I needed one for a project of mine and thought, given my sheer laziness and unwi
 The queue started with fine grained locks, then later switched to a lock-free CAS based implementation.
 
 ## Status
-This is still a work in progress. It has the following issues/shortcomings:
-- Read while write seems to occasionally suffer from race conditions.
-- Popped nodes are marked deleted, and removed from the list, but their memory is not freed yet.
+This is in working order. However, popped nodes are marked deleted and removed from the list, but their memory is not freed yet.
 
 ## Features
 - Templated Key/Value priority queue
