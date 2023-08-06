@@ -26,6 +26,11 @@ namespace CSLPQ
             {
             }
 
+            Node(const K& priority, const V& value, int level) requires std::is_fundamental_v<V> : priority(priority),
+            data(value), level(level), next(level)
+            {
+            }
+
             Node(const K& priority, const V& value, int level) requires OnlyMoveConstructible<V> : priority(priority),
             data(std::move(value)), level(level), next(level)
             {

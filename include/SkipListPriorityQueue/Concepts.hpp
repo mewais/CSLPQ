@@ -16,7 +16,8 @@ namespace CSLPQ
     concept OnlyMoveConstructible = std::is_move_constructible_v<T> && !std::is_fundamental_v<T>;
 
     template <class T>
-    concept OnlyCopyConstructible = std::is_copy_constructible_v<T> && !std::is_move_constructible_v<T>;
+    concept OnlyCopyConstructible = std::is_copy_constructible_v<T> && !std::is_move_constructible_v<T> &&
+                                    !std::is_fundamental_v<T>;
 
     template <class T>
     concept KeyType = std::totally_ordered<T>;
