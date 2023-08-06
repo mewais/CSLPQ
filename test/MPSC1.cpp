@@ -1,5 +1,6 @@
 #include <iostream>
 #include <thread>
+#include <barrier>
 #include <vector>
 #include <set>
 #include <algorithm>
@@ -7,14 +8,16 @@
 #include "SkipListPriorityQueue/Node.hpp"
 #include "SkipListPriorityQueue/Queue.hpp"
 
-#define COUNT 10000
+#define COUNT 100000
 
 CSLPQ::Queue<uint64_t, void*> queue;
 std::vector<std::vector<uint64_t>> keys;
 std::set<uint64_t> keys_ref;
+std::barrier barrier(10);
 
 void insert(std::vector<uint64_t>& local_keys)
 {
+    barrier.arrive_and_wait();
     for (uint64_t i = 0; i < COUNT / 10; i++)
     {
         queue.Push(local_keys[i], (void*)i);
@@ -33,7 +36,7 @@ void remove()
             count++;
             if (keys_ref.find(key) == keys_ref.end())
             {
-                std::cerr << "FAILURE-" << count << ": Read " << key << ": " << value << " which have already been removed" << std::endl;
+                std::cerr << "FAILURE-" << count << ": Read " << key << ": " << value << " which has already been removed" << std::endl;
                 return;
             }
             else
@@ -60,7 +63,7 @@ int main()
     }
 
     // Shuffle the keys
-    std::random_shuffle(keys.begin(), keys.end());
+    std::random_shuffle(full_keys.begin(), full_keys.end());
 
     // Split among threads
     keys.resize(10);
@@ -70,6 +73,7 @@ int main()
     }
 
     // Start the threads
+    std::cout << "Starting threads" << std::endl;
     std::vector<std::thread> ts;
     for (uint64_t i = 0; i < 10; i++)
     {

@@ -262,12 +262,7 @@ namespace CSLPQ
                 bool marked = false;
                 for (int level = first->GetLevel() - 1; level >= 1; --level)
                 {
-                    std::tie(successor, marked) = first->GetNext(level).GetPointerAndMark();
-                    while (!marked)
-                    {
-                        first->GetNext(level).SetMark();
-                        std::tie(successor, marked) = first->GetNext(level).GetPointerAndMark();
-                    }
+                    first->GetNext(level).SetMark();
                 }
 
                 marked = false;
@@ -275,11 +270,11 @@ namespace CSLPQ
                 while (true)
                 {
                     bool success = first->GetNext(0).CompareExchange(successor, false, successor, true);
-                    std::tie(successor, marked) = this->head->GetNext(0).GetPointerAndMark();
+                    std::tie(successor, marked) = first->GetNext(0).GetPointerAndMark();
                     if (success)
                     {
-                        priority = successor->GetPriority();
-                        data = successor->GetData();
+                        priority = first->GetPriority();
+                        data = first->GetData();
                         return true;
                     }
                     else if (marked)

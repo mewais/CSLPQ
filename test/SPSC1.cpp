@@ -7,7 +7,7 @@
 #include "SkipListPriorityQueue/Node.hpp"
 #include "SkipListPriorityQueue/Queue.hpp"
 
-#define COUNT 10000
+#define COUNT 100000
 
 CSLPQ::Queue<uint64_t, void*> queue;
 std::vector<uint64_t> keys;
@@ -33,7 +33,7 @@ void remove()
             count++;
             if (keys_ref.find(key) == keys_ref.end())
             {
-                std::cerr << "FAILURE-" << count << ": Read " << key << ": " << value << " which have already been removed" << std::endl;
+                std::cerr << "FAILURE-" << count << ": Read " << key << ": " << value << " which has already been removed" << std::endl;
                 return;
             }
             else
@@ -62,6 +62,7 @@ int main()
     std::random_shuffle(keys.begin(), keys.end());
 
     // Start the threads
+    std::cout << "Starting threads\n";
     std::thread t1(insert);
     t1.join();
     remove();
