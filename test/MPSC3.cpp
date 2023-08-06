@@ -1,19 +1,22 @@
 #include <iostream>
 #include <thread>
+#include <barrier>
 #include <vector>
 #include <set>
 #include <algorithm>
 
-#include "SkipListPriorityQueue/Queue.hpp"
+#include "CSLPQ/Queue.hpp"
 
 #define COUNT 100000
 
 CSLPQ::Queue<uint64_t, uint64_t> queue;
 std::vector<std::vector<std::pair<uint64_t, uint64_t>>> keys;
 std::set<std::pair<uint64_t, uint64_t>> keys_ref;
+std::barrier barrier(11);
 
 void insert(std::vector<std::pair<uint64_t, uint64_t>>& local_keys)
 {
+    barrier.arrive_and_wait();
     for (uint64_t i = 0; i < COUNT / 10; i++)
     {
         queue.Push(local_keys[i].first, local_keys[i].second);
@@ -22,6 +25,7 @@ void insert(std::vector<std::pair<uint64_t, uint64_t>>& local_keys)
 
 void remove()
 {
+    barrier.arrive_and_wait();
     uint64_t count = 0;
     while (!keys_ref.empty())
     {

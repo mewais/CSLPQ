@@ -3,7 +3,7 @@
 #include <set>
 #include <algorithm>
 
-#include "SkipListPriorityQueue/Queue.hpp"
+#include "CSLPQ/Queue.hpp"
 
 #define COUNT 10000
 

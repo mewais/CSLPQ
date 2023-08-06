@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(SkipListPriorityQueue)
+project(CSLPQ)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_BUILD_TYPE "Release")
@@ -7,10 +7,10 @@ set(CMAKE_BUILD_TYPE "Release")
 ##################################################################################
 ################################### Library ######################################
 ##################################################################################
-file(GLOB header_files include/SkipListPriorityQueue/*.hpp)
+file(GLOB header_files include/CSLPQ/*.hpp)
 
-add_library(SkipListPriorityQueue INTERFACE)
-target_include_directories(SkipListPriorityQueue INTERFACE
+add_library(CSLPQ INTERFACE)
+target_include_directories(CSLPQ INTERFACE
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>)
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/include

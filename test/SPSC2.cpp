@@ -4,8 +4,8 @@
 #include <set>
 #include <algorithm>
 
-#include "SkipListPriorityQueue/Node.hpp"
-#include "SkipListPriorityQueue/Queue.hpp"
+#include "CSLPQ/Node.hpp"
+#include "CSLPQ/Queue.hpp"
 
 #define COUNT 100000
 

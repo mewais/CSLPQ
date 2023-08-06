@@ -1,6 +1,6 @@
 #include <iostream>
 
-#include "SkipListPriorityQueue/Queue.hpp"
+#include "CSLPQ/Queue.hpp"
 
 int main()
 {
