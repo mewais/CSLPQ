@@ -57,11 +57,10 @@ namespace CSLPQ
                                     retry = true;
                                     break;
                                 }
-                                current = predecessor->GetNext(level).GetPointer();
+                                current = successor;
                                 if (current == nullptr)
                                 {
                                     marked = false;
-                                    successor = nullptr;
                                 }
                                 else
                                 {
@@ -128,11 +127,10 @@ namespace CSLPQ
                                     retry = true;
                                     break;
                                 }
-                                current = predecessor->GetNext(level).GetPointer();
+                                current = successor;
                                 if (current == nullptr)
                                 {
                                     marked = false;
-                                    successor = nullptr;
                                 }
                                 else
                                 {
@@ -189,7 +187,6 @@ namespace CSLPQ
                     }
                     auto predecessor = predecessors[0];
                     auto successor = successors[0];
-                    new_node->SetNext(0, successor);
                     if (!predecessor->GetNext(0).CompareExchange(successor, false, new_node, false))
                     {
                         continue;
@@ -227,7 +224,6 @@ namespace CSLPQ
                     }
                     auto predecessor = predecessors[0];
                     auto successor = successors[0];
-                    new_node->SetNext(0, successor);
                     if (!predecessor->GetNext(0).CompareExchange(successor, false, new_node, false))
                     {
                         continue;
