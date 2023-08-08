@@ -41,6 +41,41 @@ namespace CSLPQ
             {
             }
 
+            const NodeMPtr& GetNext(int level) const
+            {
+                return this->next[level];
+            }
+
+            Node<K, V>* GetNextPointer(int level) const
+            {
+                return this->next[level].GetPointer();
+            }
+
+            bool IsNextMarked(int level) const
+            {
+                return this->next[level].IsMarked();
+            }
+
+            std::pair<Node<K, V>*, bool> GetNextPointerAndMark(int level) const
+            {
+                return this->next[level].GetPointerAndMark();
+            }
+
+            int GetLevel() const
+            {
+                return this->level;
+            }
+
+            K GetPriority() const
+            {
+                return this->priority;
+            }
+
+            V GetData() const
+            {
+                return this->data;
+            }
+
             void SetNext(int level, Node<K, V>* node)
             {
                 this->next[level] = node;
@@ -51,34 +86,14 @@ namespace CSLPQ
                 this->next[level] = node;
             }
 
-            void SetNext(std::vector<NodeMPtr> nodes)
+            void SetNextMark(int level)
             {
-                this->next = nodes;
+                this->next[level].SetMark();
             }
 
-            std::vector<NodeMPtr>& GetNext()
+            bool CompareExchange(int level, Node<K, V>* old_value, bool old_mark, Node<K, V>* new_value, bool new_mark)
             {
-                return this->next;
-            }
-
-            NodeMPtr& GetNext(int level)
-            {
-                return this->next[level];
-            }
-
-            int GetLevel()
-            {
-                return this->level;
-            }
-
-            K GetPriority()
-            {
-                return this->priority;
-            }
-
-            V GetData()
-            {
-                return this->data;
+                return this->next[level].CompareExchange(old_value, old_mark, new_value, new_mark);
             }
     };
 }

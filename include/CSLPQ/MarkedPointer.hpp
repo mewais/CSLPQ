@@ -37,7 +37,7 @@ namespace CSLPQ
                 }
             }
 
-            T* GetPointer()
+            T* GetPointer() const
             {
                 // Return the pointer without the mark
                 uintptr_t val = this->pointer.load();
@@ -45,19 +45,19 @@ namespace CSLPQ
                 return (T*)(val);
             }
 
-            bool IsMarked()
+            bool IsMarked() const
             {
                 // Check if the MSB is set
                 uintptr_t val = this->pointer.load();
                 return val & MarkedPointer::mask;
             }
 
-            T* GetMarkedPointer()
+            T* GetMarkedPointer() const
             {
                 return (T*)this->pointer.load();
             }
 
-            std::pair<T*, bool> GetPointerAndMark()
+            std::pair<T*, bool> GetPointerAndMark() const
             {
                 uintptr_t val = this->pointer.load();
                 T* ptr = (T*)(val & ~MarkedPointer::mask);
@@ -65,7 +65,7 @@ namespace CSLPQ
                 return std::make_pair(ptr, mark);
             }
 
-            T* operator->()
+            T* operator->() const
             {
                 return this->GetPointer();
             }

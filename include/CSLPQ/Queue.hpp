@@ -45,13 +45,13 @@ namespace CSLPQ
                     predecessor = this->head;
                     for (auto level = this->max_level; level >= 0; --level)
                     {
-                        current = predecessor->GetNext(level).GetPointer();
+                        current = predecessor->GetNextPointer(level);
                         while (current)
                         {
-                            std::tie(successor, marked) = current->GetNext(level).GetPointerAndMark();
+                            std::tie(successor, marked) = current->GetNextPointerAndMark(level);
                             while (marked)
                             {
-                                snip = predecessor->GetNext(level).CompareExchange(current, false, successor, false);
+                                snip = predecessor->CompareExchange(level, current, false, successor, false);
                                 if (!snip)
                                 {
                                     retry = true;
@@ -64,7 +64,7 @@ namespace CSLPQ
                                 }
                                 else
                                 {
-                                    std::tie(successor, marked) = current->GetNext(level).GetPointerAndMark();
+                                    std::tie(successor, marked) = current->GetNextPointerAndMark(level);
                                 }
                             }
                             if (retry)
@@ -115,13 +115,13 @@ namespace CSLPQ
                     predecessor = this->head;
                     for (auto level = this->max_level; level >= 0; --level)
                     {
-                        current = predecessor->GetNext(level).GetPointer();
+                        current = predecessor->GetNextPointer(level);
                         if (current)
                         {
-                            std::tie(successor, marked) = current->GetNext(level).GetPointerAndMark();
+                            std::tie(successor, marked) = current->GetNextPointerAndMark(level);
                             while (marked)
                             {
-                                snip = predecessor->GetNext(level).CompareExchange(current, false, successor, false);
+                                snip = predecessor->CompareExchange(level, current, false, successor, false);
                                 if (!snip)
                                 {
                                     retry = true;
@@ -134,7 +134,7 @@ namespace CSLPQ
                                 }
                                 else
                                 {
-                                    std::tie(successor, marked) = current->GetNext(level).GetPointerAndMark();
+                                    std::tie(successor, marked) = current->GetNextPointerAndMark(level);
                                 }
                             }
                             if (retry)
@@ -165,7 +165,7 @@ namespace CSLPQ
                 Node<K, V>* current = this->head;
                 while (current != nullptr)
                 {
-                    Node<K, V>* tmp = current->GetNext(0).GetPointer();
+                    Node<K, V>* tmp = current->GetNextPointer(0);
                     delete current;
                     current = tmp;
                 }
@@ -185,9 +185,7 @@ namespace CSLPQ
                     {
                         new_node->SetNext(level, successors[level]);
                     }
-                    auto predecessor = predecessors[0];
-                    auto successor = successors[0];
-                    if (!predecessor->GetNext(0).CompareExchange(successor, false, new_node, false))
+                    if (!predecessors[0]->CompareExchange(0, successors[0], false, new_node, false))
                     {
                         continue;
                     }
@@ -195,9 +193,7 @@ namespace CSLPQ
                     {
                         while (true)
                         {
-                            predecessor = predecessors[level];
-                            successor = successors[level];
-                            if (predecessor->GetNext(level).CompareExchange(successor, false, new_node, false))
+                            if (predecessors[level]->CompareExchange(level, successors[level], false, new_node, false))
                             {
                                 break;
                             }
@@ -222,9 +218,7 @@ namespace CSLPQ
                     {
                         new_node->SetNext(level, successors[level]);
                     }
-                    auto predecessor = predecessors[0];
-                    auto successor = successors[0];
-                    if (!predecessor->GetNext(0).CompareExchange(successor, false, new_node, false))
+                    if (!predecessors[0]->CompareExchange(0, successors[0], false, new_node, false))
                     {
                         continue;
                     }
@@ -232,9 +226,7 @@ namespace CSLPQ
                     {
                         while (true)
                         {
-                            predecessor = predecessors[level];
-                            successor = successors[level];
-                            if (predecessor->GetNext(level).CompareExchange(successor, false, new_node, false))
+                            if (predecessors[level]->CompareExchange(level, successors[level], false, new_node, false))
                             {
                                 break;
                             }
@@ -258,15 +250,15 @@ namespace CSLPQ
                 bool marked = false;
                 for (int level = first->GetLevel() - 1; level >= 1; --level)
                 {
-                    first->GetNext(level).SetMark();
+                    first->SetNextMark(level);
                 }
 
                 marked = false;
-                std::tie(successor, marked) = first->GetNext(0).GetPointerAndMark();
+                std::tie(successor, marked) = first->GetNextPointerAndMark(0);
                 while (true)
                 {
-                    bool success = first->GetNext(0).CompareExchange(successor, false, successor, true);
-                    std::tie(successor, marked) = first->GetNext(0).GetPointerAndMark();
+                    bool success = first->CompareExchange(0, successor, false, successor, true);
+                    std::tie(successor, marked) = first->GetNextPointerAndMark(0);
                     if (success)
                     {
                         priority = first->GetPriority();
@@ -298,10 +290,10 @@ namespace CSLPQ
                     bool marked = false;
                     Node<K, V>* node;
                     Node<K, V>* nnode;
-                    std::tie(node, marked) = this->head->GetNext(level).GetPointerAndMark();
+                    std::tie(node, marked) = this->head->GetNextPointerAndMark(level);
                     while (node)
                     {
-                        std::tie(nnode, marked) = node->GetNext(level).GetPointerAndMark();
+                        std::tie(nnode, marked) = node->GetNextPointerAndMark(level);
                         if (!marked)
                         {
                             ss << "\tKey: " << node->GetPriority() << ", Value: " << node->GetData() << "\n";
