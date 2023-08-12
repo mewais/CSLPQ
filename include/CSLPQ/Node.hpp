@@ -12,41 +12,43 @@ namespace CSLPQ
     class Node
     {
         public:
-            typedef MarkedPointer<Node<K, V>> NodeMPtr;
+            typedef SharedPointer<Node<K, V>> NodePtr;
+            typedef MarkedSharedPointer<Node<K, V>> MNodePtr;
 
         private:
             K priority;
             V data;
             int level;
-            std::vector<NodeMPtr> next;
+            std::vector<MNodePtr> next;
+            std::atomic_flag inserting;
 
         public:
             Node(const K& priority, int level) requires std::is_default_constructible_v<V> : priority(priority),
-            data(V()), level(level), next(level)
+                 data(V()), level(level), next(level), inserting(true)
             {
             }
 
             Node(const K& priority, const V& value, int level) requires std::is_fundamental_v<V> : priority(priority),
-            data(value), level(level), next(level)
+                 data(value), level(level), next(level), inserting(true)
             {
             }
 
             Node(const K& priority, const V& value, int level) requires OnlyMoveConstructible<V> : priority(priority),
-            data(std::move(value)), level(level), next(level)
+                 data(std::move(value)), level(level), next(level), inserting(true)
             {
             }
 
             Node(const K& priority, const V& value, int level) requires OnlyCopyConstructible<V> : priority(priority),
-            data(value), level(level), next(level)
+                 data(value), level(level), next(level), inserting(true)
             {
             }
 
-            const NodeMPtr& GetNext(int level) const
+            const MNodePtr& GetNext(int level) const
             {
                 return this->next[level];
             }
 
-            Node<K, V>* GetNextPointer(int level) const
+            NodePtr GetNextPointer(int level) const
             {
                 return this->next[level].GetPointer();
             }
@@ -56,7 +58,7 @@ namespace CSLPQ
                 return this->next[level].IsMarked();
             }
 
-            std::pair<Node<K, V>*, bool> GetNextPointerAndMark(int level) const
+            std::pair<NodePtr , bool> GetNextPointerAndMark(int level) const
             {
                 return this->next[level].GetPointerAndMark();
             }
@@ -76,12 +78,17 @@ namespace CSLPQ
                 return this->data;
             }
 
-            void SetNext(int level, Node<K, V>* node)
+            bool IsInserting() const
+            {
+                return this->inserting.test();
+            }
+
+            void SetNext(int level, NodePtr node)
             {
                 this->next[level] = node;
             }
 
-            void SetNext(int level, NodeMPtr node)
+            void SetNext(int level, MNodePtr node)
             {
                 this->next[level] = node;
             }
@@ -91,9 +98,19 @@ namespace CSLPQ
                 this->next[level].SetMark();
             }
 
-            bool CompareExchange(int level, Node<K, V>* old_value, bool old_mark, Node<K, V>* new_value, bool new_mark)
+            bool TestAndSetMark(int level, NodePtr& expected)
             {
-                return this->next[level].CompareExchange(old_value, old_mark, new_value, new_mark);
+                return this->next[level].TestAndSetMark(expected);
+            }
+
+            bool CompareExchange(int level, NodePtr& old_value, NodePtr & new_value)
+            {
+                return this->next[level].CompareExchange(old_value, new_value);
+            }
+
+            void SetDoneInserting()
+            {
+                this->inserting.clear();
             }
     };
 }

@@ -4,7 +4,6 @@
 #include <vector>
 #include <random>
 #include <tuple>
-#include <shared_mutex>
 #include <sstream>
 
 #include "Concepts.hpp"
@@ -16,8 +15,10 @@ namespace CSLPQ
     class Queue
     {
         private:
+            typedef SharedPointer<Node<K, V>> NodePtr;
+
             const int max_level;
-            Node<K, V>* head;
+            NodePtr head;
 
             int GenerateRandomLevel()
             {
@@ -28,15 +29,15 @@ namespace CSLPQ
                 return dist(mt);
             }
 
-            void FindLastOfPriority(const K& priority, std::vector<Node<K, V>*>& predecessors,
-                                    std::vector<Node<K, V>*>& successors)
+            void FindLastOfPriority(const K& priority, std::vector<NodePtr>& predecessors,
+                                    std::vector<NodePtr>& successors)
             {
                 bool marked = false;
                 bool snip = false;
 
-                Node<K, V>* predecessor = nullptr;
-                Node<K, V>* current = nullptr;
-                Node<K, V>* successor = nullptr;
+                NodePtr predecessor;
+                NodePtr current;
+                NodePtr successor;
 
                 bool retry;
                 while (true)
@@ -51,14 +52,14 @@ namespace CSLPQ
                             std::tie(successor, marked) = current->GetNextPointerAndMark(level);
                             while (marked)
                             {
-                                snip = predecessor->CompareExchange(level, current, false, successor, false);
+                                snip = predecessor->CompareExchange(level, current, successor);
                                 if (!snip)
                                 {
                                     retry = true;
                                     break;
                                 }
                                 current = successor;
-                                if (current == nullptr)
+                                if (!current)
                                 {
                                     marked = false;
                                 }
@@ -71,7 +72,7 @@ namespace CSLPQ
                             {
                                 break;
                             }
-                            if (current == nullptr)
+                            if (!current)
                             {
                                 break;
                             }
@@ -99,14 +100,15 @@ namespace CSLPQ
                 }
             }
 
-            Node<K, V>* FindFirst()
+            NodePtr FindFirst()
             {
                 bool marked = false;
                 bool snip = false;
 
-                Node<K, V>* predecessor = nullptr;
-                Node<K, V>* current = nullptr;
-                Node<K, V>* successor = nullptr;
+                NodePtr predecessor;
+                NodePtr current;
+                NodePtr successor;
+                NodePtr empty;
 
                 bool retry;
                 while (true)
@@ -121,14 +123,14 @@ namespace CSLPQ
                             std::tie(successor, marked) = current->GetNextPointerAndMark(level);
                             while (marked)
                             {
-                                snip = predecessor->CompareExchange(level, current, false, successor, false);
+                                snip = predecessor->CompareExchange(level, current, successor);
                                 if (!snip)
                                 {
                                     retry = true;
                                     break;
                                 }
                                 current = successor;
-                                if (current == nullptr)
+                                if (!current)
                                 {
                                     marked = false;
                                 }
@@ -148,35 +150,23 @@ namespace CSLPQ
                         }
                         else if (level == 0)
                         {
-                            return nullptr;
+                            return empty;
                         }
                     }
                 }
             }
 
         public:
-            Queue(int max_level = 4) : max_level(max_level)
+            Queue(int max_level = 4) : max_level(max_level), head(new Node<K, V>(K(), max_level + 1))
             {
-                this->head = new Node<K, V>(K(), max_level + 1);
-            }
-            
-            ~Queue()
-            {
-                Node<K, V>* current = this->head;
-                while (current != nullptr)
-                {
-                    Node<K, V>* tmp = current->GetNextPointer(0);
-                    delete current;
-                    current = tmp;
-                }
             }
 
             void Push(const K& priority)
             {
                 int new_level = this->GenerateRandomLevel();
-                auto new_node = new Node<K, V>(priority, new_level);
-                std::vector<Node<K, V>*> predecessors(this->max_level + 1, nullptr);
-                std::vector<Node<K, V>*> successors(this->max_level + 1, nullptr);
+                NodePtr new_node(new Node<K, V>(priority, new_level));
+                std::vector<NodePtr> predecessors(this->max_level + 1);
+                std::vector<NodePtr> successors(this->max_level + 1);
 
                 while (true)
                 {
@@ -185,7 +175,7 @@ namespace CSLPQ
                     {
                         new_node->SetNext(level, successors[level]);
                     }
-                    if (!predecessors[0]->CompareExchange(0, successors[0], false, new_node, false))
+                    if (!predecessors[0]->CompareExchange(0, successors[0], new_node))
                     {
                         continue;
                     }
@@ -193,7 +183,7 @@ namespace CSLPQ
                     {
                         while (true)
                         {
-                            if (predecessors[level]->CompareExchange(level, successors[level], false, new_node, false))
+                            if (predecessors[level]->CompareExchange(level, successors[level], new_node))
                             {
                                 break;
                             }
@@ -202,14 +192,15 @@ namespace CSLPQ
                     }
                     break;
                 }
+                new_node->SetDoneInserting();
             }
 
             void Push(const K& priority, const V& data)
             {
                 int new_level = this->GenerateRandomLevel();
-                auto new_node = new Node<K, V>(priority, data, new_level);
-                std::vector<Node<K, V>*> predecessors(this->max_level + 1, nullptr);
-                std::vector<Node<K, V>*> successors(this->max_level + 1, nullptr);
+                NodePtr new_node(new Node<K, V>(priority, data, new_level));
+                std::vector<NodePtr> predecessors(this->max_level + 1);
+                std::vector<NodePtr> successors(this->max_level + 1);
 
                 while (true)
                 {
@@ -218,7 +209,7 @@ namespace CSLPQ
                     {
                         new_node->SetNext(level, successors[level]);
                     }
-                    if (!predecessors[0]->CompareExchange(0, successors[0], false, new_node, false))
+                    if (!predecessors[0]->CompareExchange(0, successors[0], new_node))
                     {
                         continue;
                     }
@@ -226,7 +217,7 @@ namespace CSLPQ
                     {
                         while (true)
                         {
-                            if (predecessors[level]->CompareExchange(level, successors[level], false, new_node, false))
+                            if (predecessors[level]->CompareExchange(level, successors[level], new_node))
                             {
                                 break;
                             }
@@ -235,47 +226,46 @@ namespace CSLPQ
                     }
                     break;
                 }
+                new_node->SetDoneInserting();
             }
 
             bool TryPop(K& priority, V& data)
             {
-                Node<K, V>* successor = nullptr;
-                Node<K, V>* first = this->FindFirst();
+                NodePtr successor;
+                NodePtr first = this->FindFirst();
 
-                if (first == nullptr)
+                if (!first)
+                {
+                    return false;
+                }
+                if (first->IsInserting())
                 {
                     return false;
                 }
 
-                bool marked = false;
                 for (int level = first->GetLevel() - 1; level >= 1; --level)
                 {
                     first->SetNextMark(level);
                 }
 
-                marked = false;
-                std::tie(successor, marked) = first->GetNextPointerAndMark(0);
-                while (true)
+                successor = first->GetNextPointer(0);
+                priority = first->GetPriority();
+                data = first->GetData();
+                bool success = first->TestAndSetMark(0, successor);
+                if (success)
                 {
-                    bool success = first->CompareExchange(0, successor, false, successor, true);
-                    std::tie(successor, marked) = first->GetNextPointerAndMark(0);
-                    if (success)
-                    {
-                        priority = first->GetPriority();
-                        data = first->GetData();
-                        return true;
-                    }
-                    else if (marked)
-                    {
-                        return false;
-                    }
+                    return true;
+                }
+                else
+                {
+                    return false;
                 }
             }
 
             std::string ToString(bool all_levels = false) requires Printable<K> && Printable<V>
             {
                 std::stringstream ss;
-                int max = all_levels ? this->max_level : 0;
+                int max = all_levels? this->max_level : 0;
                 for (int level = 0; level <= max; ++level)
                 {
                     if (all_levels)
@@ -288,8 +278,8 @@ namespace CSLPQ
                     }
 
                     bool marked = false;
-                    Node<K, V>* node;
-                    Node<K, V>* nnode;
+                    NodePtr node;
+                    NodePtr nnode;
                     std::tie(node, marked) = this->head->GetNextPointerAndMark(level);
                     while (node)
                     {
