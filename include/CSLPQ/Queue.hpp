@@ -15,10 +15,10 @@ namespace CSLPQ
     class Queue
     {
         private:
-            typedef SharedPointer<Node<K, V>> NodePtr;
+            typedef SharedPointer<Node<K, V>> SPtr;
 
             const int max_level;
-            NodePtr head;
+            SPtr head;
 
             int GenerateRandomLevel()
             {
@@ -29,15 +29,15 @@ namespace CSLPQ
                 return dist(mt);
             }
 
-            void FindLastOfPriority(const K& priority, std::vector<NodePtr>& predecessors,
-                                    std::vector<NodePtr>& successors)
+            void FindLastOfPriority(const K& priority, std::vector<SPtr>& predecessors,
+                                    std::vector<SPtr>& successors)
             {
                 bool marked = false;
                 bool snip = false;
 
-                NodePtr predecessor;
-                NodePtr current;
-                NodePtr successor;
+                SPtr predecessor;
+                SPtr current;
+                SPtr successor;
 
                 bool retry;
                 while (true)
@@ -100,15 +100,15 @@ namespace CSLPQ
                 }
             }
 
-            NodePtr FindFirst()
+            SPtr FindFirst()
             {
                 bool marked = false;
                 bool snip = false;
 
-                NodePtr predecessor;
-                NodePtr current;
-                NodePtr successor;
-                NodePtr empty;
+                SPtr predecessor;
+                SPtr current;
+                SPtr successor;
+                SPtr empty;
 
                 bool retry;
                 while (true)
@@ -164,9 +164,9 @@ namespace CSLPQ
             void Push(const K& priority)
             {
                 int new_level = this->GenerateRandomLevel();
-                NodePtr new_node(new Node<K, V>(priority, new_level));
-                std::vector<NodePtr> predecessors(this->max_level + 1);
-                std::vector<NodePtr> successors(this->max_level + 1);
+                SPtr new_node(new Node<K, V>(priority, new_level));
+                std::vector<SPtr> predecessors(this->max_level + 1);
+                std::vector<SPtr> successors(this->max_level + 1);
 
                 while (true)
                 {
@@ -198,9 +198,9 @@ namespace CSLPQ
             void Push(const K& priority, const V& data)
             {
                 int new_level = this->GenerateRandomLevel();
-                NodePtr new_node(new Node<K, V>(priority, data, new_level));
-                std::vector<NodePtr> predecessors(this->max_level + 1);
-                std::vector<NodePtr> successors(this->max_level + 1);
+                SPtr new_node(new Node<K, V>(priority, data, new_level));
+                std::vector<SPtr> predecessors(this->max_level + 1);
+                std::vector<SPtr> successors(this->max_level + 1);
 
                 while (true)
                 {
@@ -231,8 +231,8 @@ namespace CSLPQ
 
             bool TryPop(K& priority, V& data)
             {
-                NodePtr successor;
-                NodePtr first = this->FindFirst();
+                SPtr successor;
+                SPtr first = this->FindFirst();
 
                 if (!first)
                 {
@@ -278,8 +278,8 @@ namespace CSLPQ
                     }
 
                     bool marked = false;
-                    NodePtr node;
-                    NodePtr nnode;
+                    SPtr node;
+                    SPtr nnode;
                     std::tie(node, marked) = this->head->GetNextPointerAndMark(level);
                     while (node)
                     {

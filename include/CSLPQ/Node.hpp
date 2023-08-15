@@ -4,7 +4,7 @@
 #include <vector>
 
 #include "Concepts.hpp"
-#include "MarkedPointer.hpp"
+#include "Pointers.hpp"
 
 namespace CSLPQ
 {
@@ -12,14 +12,15 @@ namespace CSLPQ
     class Node
     {
         public:
-            typedef SharedPointer<Node<K, V>> NodePtr;
-            typedef MarkedSharedPointer<Node<K, V>> MNodePtr;
+            typedef SharedPointer<Node<K, V>> SPtr;
+            typedef AtomicSharedPointer<Node<K, V>> ASPtr;
+            typedef MarkableAtomicSharedPointer<Node<K, V>> MASPtr;
 
         private:
             K priority;
             V data;
             int level;
-            std::vector<MNodePtr> next;
+            std::vector<MASPtr> next;
             std::atomic_flag inserting;
 
         public:
@@ -43,14 +44,9 @@ namespace CSLPQ
             {
             }
 
-            const MNodePtr& GetNext(int level) const
+            SPtr GetNextPointer(int level) const
             {
-                return this->next[level];
-            }
-
-            NodePtr GetNextPointer(int level) const
-            {
-                return this->next[level].GetPointer();
+                return this->next[level].Load();
             }
 
             bool IsNextMarked(int level) const
@@ -58,9 +54,9 @@ namespace CSLPQ
                 return this->next[level].IsMarked();
             }
 
-            std::pair<NodePtr , bool> GetNextPointerAndMark(int level) const
+            std::pair<SPtr , bool> GetNextPointerAndMark(int level) const
             {
-                return this->next[level].GetPointerAndMark();
+                return this->next[level].LoadMarked();
             }
 
             int GetLevel() const
@@ -83,12 +79,7 @@ namespace CSLPQ
                 return this->inserting.test();
             }
 
-            void SetNext(int level, NodePtr node)
-            {
-                this->next[level] = node;
-            }
-
-            void SetNext(int level, MNodePtr node)
+            void SetNext(int level, SPtr node)
             {
                 this->next[level] = node;
             }
@@ -98,14 +89,14 @@ namespace CSLPQ
                 this->next[level].SetMark();
             }
 
-            bool TestAndSetMark(int level, NodePtr& expected)
+            bool TestAndSetMark(int level, SPtr& expected)
             {
                 return this->next[level].TestAndSetMark(expected);
             }
 
-            bool CompareExchange(int level, NodePtr& old_value, NodePtr & new_value)
+            bool CompareExchange(int level, SPtr& old_value, SPtr new_value)
             {
-                return this->next[level].CompareExchange(old_value, new_value);
+                return this->next[level].CompareExchangeStrong(old_value, new_value);
             }
 
             void SetDoneInserting()
