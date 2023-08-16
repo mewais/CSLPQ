@@ -15,7 +15,7 @@ namespace CSLPQ
     class Queue
     {
         private:
-            typedef SharedPointer<Node<K, V>> SPtr;
+            typedef jss::shared_ptr<Node<K, V>> SPtr;
 
             const int max_level;
             SPtr head;

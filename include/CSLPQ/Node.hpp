@@ -12,9 +12,9 @@ namespace CSLPQ
     class Node
     {
         public:
-            typedef SharedPointer<Node<K, V>> SPtr;
-            typedef AtomicSharedPointer<Node<K, V>> ASPtr;
-            typedef MarkableAtomicSharedPointer<Node<K, V>> MASPtr;
+            typedef jss::shared_ptr<Node<K, V>> SPtr;
+            typedef jss::atomic_shared_ptr<Node<K, V>> ASPtr;
+            typedef jss::markable_atomic_shared_ptr<Node<K, V>> MASPtr;
 
         private:
             K priority;
@@ -46,17 +46,17 @@ namespace CSLPQ
 
             SPtr GetNextPointer(int level) const
             {
-                return this->next[level].Load();
+                return this->next[level].load();
             }
 
             bool IsNextMarked(int level) const
             {
-                return this->next[level].IsMarked();
+                return this->next[level].is_marked();
             }
 
             std::pair<SPtr , bool> GetNextPointerAndMark(int level) const
             {
-                return this->next[level].LoadMarked();
+                return this->next[level].load_marked();
             }
 
             int GetLevel() const
@@ -86,17 +86,17 @@ namespace CSLPQ
 
             void SetNextMark(int level)
             {
-                this->next[level].SetMark();
+                this->next[level].set_mark();
             }
 
             bool TestAndSetMark(int level, SPtr& expected)
             {
-                return this->next[level].TestAndSetMark(expected);
+                return this->next[level].test_and_set_mark(expected);
             }
 
             bool CompareExchange(int level, SPtr& old_value, SPtr new_value)
             {
-                return this->next[level].CompareExchangeStrong(old_value, new_value);
+                return this->next[level].compare_exchange_strong(old_value, new_value);
             }
 
             void SetDoneInserting()

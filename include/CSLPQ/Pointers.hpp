@@ -1,1114 +1,1096 @@
-#ifndef __CSLPQ_POINTERS_HPP__
-#define __CSLPQ_POINTERS_HPP__
+// //-*-C++-*-
+// Implementation of atomic_shared_ptr as per N4162
+// (http://isocpp.org/files/papers/N4162.pdf)
+//
+// Copyright (c) 2014, Just Software Solutions Ltd
+// All rights reserved.
+//
+// Redistribution and use in source and binary forms, with or
+// without modification, are permitted provided that the
+// following conditions are met:
+//
+// 1. Redistributions of source code must retain the above
+// copyright notice, this list of conditions and the following
+// disclaimer.
+//
+// 2. Redistributions in binary form must reproduce the above
+// copyright notice, this list of conditions and the following
+// disclaimer in the documentation and/or other materials
+// provided with the distribution.
+//
+// 3. Neither the name of the copyright holder nor the names of
+// its contributors may be used to endorse or promote products
+// derived from this software without specific prior written
+// permission.
+//
+// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND
+// CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES,
+// INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+// MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+// DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR
+// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+// SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+// NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+// LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+// HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+// CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+// OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+// EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include <cstdint>
+#ifndef _JSS_ATOMIC_SHARED_PTR
+#define _JSS_ATOMIC_SHARED_PTR
 #include <atomic>
-
+#include <memory>
 #include "Atomic128.hpp"
 
-namespace CSLPQ
-{
-    // This includes definitions for SharedPointer, AtomicSharedPointer, and MarkedAtomicSharedPointer.
-    // The former two as described and implemented here: https://github.com/anthonywilliams/atomic_shared_ptr
-    // The latter is a modification of the former to include a mark bit for lock-free operation.
+namespace jss{
+    template<class T> class shared_ptr;
 
-    struct SharedPointerDataBlockBase{};
+    struct shared_ptr_data_block_base{};
 
-    template <typename D>
-    struct SharedPointerDeleterBase
-    {
+    template<class D>
+    struct shared_ptr_deleter_base{
         D d;
 
-        SharedPointerDeleterBase(D& d) : d(d)
-        {
-        }
+        shared_ptr_deleter_base(D& d_):
+                d(d_)
+        {}
 
-        template <typename P>
-        void DoDelete(P p)
+        template<typename P>
+        void do_delete(P p)
         {
-            this->d(p);
+            d(p);
         }
     };
 
     template<>
-    struct SharedPointerDeleterBase<void>
-    {
-        template <typename T>
-        void DoDelete(T* p)
+    struct shared_ptr_deleter_base<void>{
+        template<typename T>
+        void do_delete(T* p)
         {
             delete p;
         }
     };
 
-    struct SharedPointerHeaderBlockBase
-    {
-        struct Counter
-        {
-            uint32_t external_count;
-            int32_t count;
+    struct shared_ptr_header_block_base{
+        struct counter{
+            unsigned external_counters;
+            int count;
 
-            Counter() noexcept : external_count(0), count(1)
-            {
-            }
+            counter() noexcept:
+                    external_counters(0),
+                    count(1)
+            {}
         };
 
-        static unsigned const cast_pointer_count = 3;
-        struct PointerExtensionBlock
-        {
+        static unsigned const cast_pointer_count=3;
+        struct ptr_extension_block{
             std::atomic<void*> cast_pointers[cast_pointer_count];
-            std::atomic<PointerExtensionBlock*> cast_pointers_extension;
+            std::atomic<ptr_extension_block*> cp_extension;
 
-            PointerExtensionBlock() : cast_pointers_extension(nullptr)
+            ptr_extension_block():
+                    cp_extension(0)
             {
-                for (auto& cast_pointer : this->cast_pointers)
-                {
-                    cast_pointer = nullptr;
+                for(unsigned i=0;i<cast_pointer_count;++i){
+                    cast_pointers[i]=0;
                 }
             }
 
-            ~PointerExtensionBlock()
+            unsigned get_ptr_index(void* p)
             {
-                delete this->cast_pointers_extension.load();
-            }
-
-            uint32_t GetPointerIndex(void* pointer)
-            {
-                for (uint32_t i = 0; i < cast_pointer_count; i++)
-                {
-                    void* entry = this->cast_pointers[i].load();
-                    if (entry == pointer)
-                    {
+                for(unsigned i=0;i<cast_pointer_count;++i){
+                    void* entry=cast_pointers[i].load();
+                    if(entry==p)
                         return i;
-                    }
-                    if (!entry)
-                    {
-                        if (this->cast_pointers[i].compare_exchange_strong(entry, pointer) || (entry == pointer))
-                        {
+                    if(!entry){
+                        if(cast_pointers[i].compare_exchange_strong(entry,p) ||
+                           (entry==p)){
                             return i;
                         }
                     }
                 }
-                PointerExtensionBlock* ext = this->cast_pointers_extension.load();
-                if (!ext)
-                {
-                    auto new_extension = new PointerExtensionBlock();
-                    if (!this->cast_pointers_extension.compare_exchange_strong(ext, new_extension))
-                    {
+                ptr_extension_block*extension=cp_extension.load();
+                if(!extension){
+                    ptr_extension_block* new_extension=new ptr_extension_block;
+                    if(!cp_extension.compare_exchange_strong(extension,new_extension)){
                         delete new_extension;
                     }
-                    else
-                    {
-                        ext = new_extension;
+                    else{
+                        extension=new_extension;
                     }
                 }
-                return ext->GetPointerIndex(pointer) + cast_pointer_count;
+                return extension->get_ptr_index(p)+cast_pointer_count;
             }
 
-            void* GetPointer(uint32_t index) const
+            void* get_pointer(unsigned index)
             {
-                if (index < cast_pointer_count)
-                {
-                    return this->cast_pointers[index].load();
-                }
-                else
-                {
-                    return  this->cast_pointers_extension.load()->GetPointer(index - cast_pointer_count);
-                }
+                return (index<cast_pointer_count)?
+                       cast_pointers[index].load():
+                       cp_extension.load()->get_pointer(index-cast_pointer_count);
             }
+
+            ~ptr_extension_block()
+            {
+                delete cp_extension.load();
+            }
+
         };
 
-        std::atomic<Counter> count;
-        std::atomic<uint32_t> weak_count;
-        PointerExtensionBlock extension;
+        std::atomic<counter> count;
+        std::atomic<unsigned> weak_count;
+        ptr_extension_block cp_extension;
 
-        SharedPointerHeaderBlockBase() : count(Counter()), weak_count(1)
+        unsigned use_count()
         {
+            counter c=count.load(std::memory_order_relaxed);
+            return c.count+(c.external_counters?1:0);
         }
 
-        virtual ~SharedPointerHeaderBlockBase()
+        unsigned get_ptr_index(void* p)
         {
+            return cp_extension.get_ptr_index(p);
         }
 
-        uint32_t UseCount() const
+        virtual ~shared_ptr_header_block_base()
+        {}
+
+        template<typename T>
+        T* get_ptr(unsigned index)
         {
-            Counter counter = this->count.load();
-            return counter.count + (counter.external_count? 1 : 0);
+            return static_cast<T*>(cp_extension.get_pointer(index));
         }
 
-        uint32_t GetPointerIndex(void* pointer)
+        shared_ptr_header_block_base():
+                count(counter()),weak_count(1)
+        {}
+
+        virtual void do_delete()=0;
+
+        void delete_object()
         {
-            return this->extension.GetPointerIndex(pointer);
+            do_delete();
+            dec_weak_count();
         }
 
-        template <typename T>
-        T* GetPointer(uint32_t index) const
+        void dec_weak_count()
         {
-            return static_cast<T*>(this->extension.GetPointer(index));
-        }
-
-        void IncrementWeakCount()
-        {
-            ++this->weak_count;
-        }
-
-        void DecrementWeakCount()
-        {
-            if (this->weak_count.fetch_sub(1) == 1)
-            {
+            if(weak_count.fetch_add(-1)==1){
                 delete this;
             }
         }
 
-        void IncrementCount()
+        void inc_weak_count()
         {
-            Counter old = this->count.load();
-            while (true)
-            {
-                Counter next = old;
-                ++next.count;
-                if (this->count.compare_exchange_weak(old, next))
-                {
+            ++weak_count;
+        }
+
+        void dec_count()
+        {
+            counter old=count.load(std::memory_order_relaxed);
+            for(;;){
+                counter new_count=old;
+                --new_count.count;
+                if(count.compare_exchange_weak(old,new_count))
                     break;
-                }
+            }
+            if((old.count==1) && !old.external_counters){
+                delete_object();
             }
         }
 
-        void DecrementCount()
+        bool shared_from_weak()
         {
-            Counter old = this->count.load();
-            while (true)
-            {
-                Counter next = old;
-                --next.count;
-                if (this->count.compare_exchange_weak(old, next))
-                {
-                    break;
-                }
-            }
-            if ((old.count == 1) && !old.external_count)
-            {
-                this->DeleteObject();
-            }
-        }
-
-        void AddExternalCounters(uint32_t ext_count)
-        {
-            Counter old = this->count.load();
-            while (true)
-            {
-                Counter next = old;
-                next.external_count += ext_count;
-                if (this->count.compare_exchange_weak(old, next))
-                {
-                    break;
-                }
-            }
-        }
-
-        void RemoveExternalCounter()
-        {
-            Counter old = this->count.load();
-            while (true)
-            {
-                Counter next = old;
-                --next.external_count;
-                if (this->count.compare_exchange_weak(old, next))
-                {
-                    break;
-                }
-            }
-            if (!old.count && (old.external_count == 1))
-            {
-                this->DeleteObject();
-            }
-        }
-
-        bool SharedFromWeak()
-        {
-            Counter old = this->count.load();
-            while (old.count || old.external_count)
-            {
-                Counter next = old;
-                ++next.count;
-                if (this->count.compare_exchange_weak(old, next))
-                {
+            counter old=count.load(std::memory_order_relaxed);
+            while(old.count||old.external_counters){
+                counter new_count=old;
+                ++new_count.count;
+                if(count.compare_exchange_weak(old,new_count))
                     return true;
-                }
             }
             return false;
         }
 
-        virtual void DoDelete() = 0;
-
-        void DeleteObject()
+        void inc_count()
         {
-            this->DoDelete();
-            this->DecrementWeakCount();
+            counter old=count.load(std::memory_order_relaxed);
+            for(;;){
+                counter new_count=old;
+                ++new_count.count;
+                if(count.compare_exchange_weak(old,new_count))
+                    break;
+            }
+        }
+
+        void add_external_counters(unsigned external_count)
+        {
+            counter old=count.load(std::memory_order_relaxed);
+            for(;;){
+                counter new_count=old;
+                new_count.external_counters+=external_count;
+                if(count.compare_exchange_weak(old,new_count))
+                    break;
+            }
+        }
+
+        void remove_external_counter()
+        {
+            counter old=count.load(std::memory_order_relaxed);
+            for(;;){
+                counter new_count=old;
+                --new_count.external_counters;
+                if(count.compare_exchange_weak(old,new_count))
+                    break;
+            }
+            if(!old.count && (old.external_counters==1)){
+                delete_object();
+            }
+        }
+
+    };
+
+    template<class P>
+    struct shared_ptr_header_block:
+            shared_ptr_header_block_base{};
+
+    template<class P,class D>
+    struct shared_ptr_header_separate:
+            public shared_ptr_header_block<P>,
+            private shared_ptr_deleter_base<D>{
+        P const ptr;
+
+        void* get_base_ptr()
+        {
+            return ptr;
+        }
+
+        shared_ptr_header_separate(P p):
+                ptr(p)
+        {}
+
+        template<typename D2>
+        shared_ptr_header_separate(P p,D2& d):
+                shared_ptr_deleter_base<D>(d),ptr(p)
+        {}
+
+        void do_delete()
+        {
+            shared_ptr_deleter_base<D>::do_delete(ptr);
         }
     };
 
-    template <typename P>
-    struct SharedPointerHeaderBlock : SharedPointerHeaderBlockBase{};
+    template<class T>
+    struct shared_ptr_header_combined:
+            public shared_ptr_header_block<T*>{
+        typedef typename std::aligned_storage<sizeof(T),alignof(T)>::type storage_type;
+        storage_type storage;
 
-    template <typename P, typename D>
-    struct SharedPointerHeaderSeparate : public SharedPointerHeaderBlock<P>,
-                                         private SharedPointerDeleterBase<D>
-    {
-        P const pointer;
-
-        SharedPointerHeaderSeparate(P p) : pointer(p)
-        {
+        T* value(){
+            return static_cast<T*>(get_base_ptr());
         }
 
-        template <typename D2>
-        SharedPointerHeaderSeparate(P p, D2& d) : SharedPointerDeleterBase<D>(d), pointer(p)
+        void* get_base_ptr()
         {
+            return &storage;
         }
 
-        void* GetBasePointer() const
+        template<typename ... Args>
+        shared_ptr_header_combined(Args&& ... args)
         {
-            return this->pointer;
+            new(get_base_ptr()) T(static_cast<Args&&>(args)...);
         }
 
-        void DoDelete()
+        void do_delete()
         {
-            SharedPointerDeleterBase<D>::DoDelete(this->pointer);
+            value()->~T();
         }
     };
 
-    template <typename T>
-    struct SharedPointerHeaderCombined : public SharedPointerHeaderBlock<T*>
-    {
-        typedef typename std::aligned_storage<sizeof(T), alignof(T)>::type Storage;
-        Storage storage;
+    template<typename T,typename ... Args>
+    shared_ptr<T> make_shared(Args&& ... args);
 
-        template <typename... Args>
-        SharedPointerHeaderCombined(Args&&... args)
-        {
-            new (this->GetBasePointer()) T(static_cast<Args&&>(args)...);
-        }
-
-        T* value()
-        {
-            return static_cast<T*>(this->GetBasePointer());
-        }
-
-        void* GetBasePointer() const
-        {
-            return &this->storage;
-        }
-        
-        void DoDelete()
-        {
-            this->value()->~T();
-        }
-    };
-
-    template <typename T>
-    class SharedPointer
-    {
+    template<class T> class shared_ptr {
         private:
-            T* pointer;
-            SharedPointerHeaderBlockBase* header;
+            T* ptr;
+            shared_ptr_header_block_base* header;
 
             template<typename U>
-            friend class AtomicSharedPointer;
-
+            friend class atomic_shared_ptr;
             template<typename U>
-            friend class MarkableAtomicSharedPointer;
-
+            friend class markable_atomic_shared_ptr;
             template<typename U>
-            friend class SharedPointer;
+            friend class shared_ptr;
+
+            template<typename U,typename ... Args>
+            friend shared_ptr<U> make_shared(Args&& ... args);
+
+            shared_ptr(shared_ptr_header_block_base* header_,unsigned index):
+                    ptr(header_?header_->get_ptr<T>(index):nullptr),header(header_)
+            {
+                if(header){
+                    header->inc_count();
+                }
+            }
+
+            shared_ptr(shared_ptr_header_block_base* header_,T* ptr_):
+                    ptr(ptr_),header(header_)
+            {
+                if(header && !header->shared_from_weak()){
+                    ptr=nullptr;
+                    header=nullptr;
+                }
+            }
+
+            shared_ptr(shared_ptr_header_combined<T>* header_):
+                    ptr(header_->value()),header(header_)
+            {}
+
+            void clear()
+            {
+                header=nullptr;
+                ptr=nullptr;
+            }
 
         public:
             typedef T element_type;
+            // 20.8.2.2.1, constructors:
+            constexpr shared_ptr() noexcept:
+                    ptr(nullptr),header(nullptr)
+            {}
 
-            constexpr SharedPointer() noexcept : pointer(nullptr), header(nullptr)
-            {
-            }
-
-            template <typename Y>
-            explicit SharedPointer(Y* p)
+            template<class Y> explicit shared_ptr(Y* p)
             try:
-                pointer(p), header(new SharedPointerHeaderSeparate<Y*, void>(p))
-                {
-                }
-            catch (...)
-            {
+                    ptr(p),
+                    header(new shared_ptr_header_separate<Y*,void>(p))
+            {}
+            catch(...){
                 delete p;
             }
 
-            template <typename Y, typename D>
-            SharedPointer(Y* p, D d)
+
+            template<class Y, class D> shared_ptr(Y* p, D d)
             try:
-                pointer(p), header(new SharedPointerHeaderSeparate<Y*, D>(p, d))
-                {
-                }
-            catch (...)
-            {
+                    ptr(p),header(new shared_ptr_header_separate<Y*,D>(p,d))
+            {}
+            catch(...){
                 d(p);
             }
 
-            template <typename D>
-            SharedPointer(std::nullptr_t p, D d)
+            template <class D> shared_ptr(std::nullptr_t p, D d)
             try:
-                pointer(p), header(new SharedPointerHeaderSeparate<std::nullptr_t, D>(p, d))
-                {
-                }
-            catch (...)
-            {
+                    ptr(p),
+                    header(new shared_ptr_header_separate<std::nullptr_t,D>(p,d))
+            {}
+            catch(...){
                 d(p);
             }
 
-            template <typename Y, typename D, typename A> SharedPointer(Y* p, D d, A a);
-            template <typename D, typename A> SharedPointer(std::nullptr_t p, D d, A a);
+            template<class Y, class D, class A> shared_ptr(Y* p, D d, A a);
+            template <class D, class A> shared_ptr(std::nullptr_t p, D d, A a);
 
-            template <typename Y>
-            SharedPointer(const SharedPointer<Y>& r, T* p) noexcept : pointer(p),  header(r.header)
+            template<class Y> shared_ptr(const shared_ptr<Y>& r, T* p) noexcept:
+                    ptr(p),header(r.header)
             {
-                if (this->header)
-                {
-                    this->header->IncrementCount();
+                if(header)
+                    header->inc_count();
+            }
+
+            shared_ptr(const shared_ptr& r) noexcept:
+                    ptr(r.ptr),header(r.header)
+            {
+                if(header)
+                    header->inc_count();
+            }
+
+            template<class Y> shared_ptr(const shared_ptr<Y>& r) noexcept:
+                    ptr(r.ptr),header(r.header)
+            {
+                if(header)
+                    header->inc_count();
+            }
+
+            shared_ptr(shared_ptr&& r) noexcept:
+                    ptr(r.ptr),header(r.header)
+            {
+                r.clear();
+            }
+
+            template<class Y> shared_ptr(shared_ptr<Y>&& r) noexcept:
+                    ptr(r.ptr),header(r.header)
+            {
+                r.clear();
+            }
+
+            constexpr shared_ptr(std::nullptr_t) : shared_ptr() { }
+            // 20.8.2.2.2, destructor:
+            ~shared_ptr()
+            {
+                if(header){
+                    header->dec_count();
                 }
             }
 
-            SharedPointer(const SharedPointer& r) noexcept : pointer(r.pointer), header(r.header)
+            // 20.8.2.2.3, assignment:
+            shared_ptr& operator=(const shared_ptr& r) noexcept
             {
-                if (this->header)
-                {
-                    this->header->IncrementCount();
-                }
-            }
-
-            template <typename Y>
-            explicit SharedPointer(const SharedPointer<Y>& r) noexcept : pointer(r.pointer), header(r.header)
-            {
-                if (this->header)
-                {
-                    this->header->IncrementCount();
-                }
-            }
-
-            SharedPointer(SharedPointer&& r) noexcept : pointer(r.pointer), header(r.header)
-            {
-                r.Clear();
-            }
-
-            template <typename Y>
-            explicit SharedPointer(SharedPointer<Y>&& r) noexcept : pointer(r.pointer), header(r.header)
-            {
-                r.Clear();
-            }
-
-            constexpr SharedPointer(std::nullptr_t) : SharedPointer()
-            {
-            }
-
-        private:
-            SharedPointer(SharedPointerHeaderBlockBase* header, uint32_t index) :
-                          pointer(header? header->GetPointer<T>(index): nullptr), header(header)
-            {
-                if (header)
-                {
-                    header->IncrementCount();
-                }
-            }
-
-            SharedPointer(SharedPointerHeaderBlockBase* header, T* pointer) : pointer(pointer), header(header)
-            {
-                if (header && !header->SharedFromWeak())
-                {
-                    this->pointer = nullptr;
-                    this->header = nullptr;
-                }
-            }
-
-            SharedPointer(SharedPointerHeaderCombined<T>* header) : pointer(header->value()), header(header)
-            {
-            }
-
-            void Clear()
-            {
-                this->header = nullptr;
-                this->pointer = nullptr;
-            }
-
-        public:
-            ~SharedPointer()
-            {
-                if (this->header)
-                {
-                    this->header->DecrementCount();
-                }
-            }
-
-            SharedPointer& operator=(const SharedPointer& r) noexcept
-            {
-                if (&r != this)
-                {
-                    SharedPointer temp(r);
-                    this->Swap(temp);
+                if(&r!=this){
+                    shared_ptr temp(r);
+                    swap(temp);
                 }
                 return *this;
             }
-
-            template <typename Y>
-            SharedPointer& operator=(const SharedPointer<Y>& r) noexcept
+            template<class Y> shared_ptr& operator=(const shared_ptr<Y>& r) noexcept
             {
-                SharedPointer temp(r);
-                this->Swap(temp);
+                shared_ptr temp(r);
+                swap(temp);
                 return *this;
             }
 
-            SharedPointer& operator=(SharedPointer&& r) noexcept
+            shared_ptr& operator=(shared_ptr&& r) noexcept
             {
-                this->Swap(r);
-                r.Reset();
+                swap(r);
+                r.reset();
                 return *this;
             }
 
-            template <typename Y>
-            SharedPointer& operator=(SharedPointer<Y>&& r) noexcept
+            template<class Y> shared_ptr& operator=(shared_ptr<Y>&& r) noexcept
             {
-                SharedPointer temp(static_cast<SharedPointer<Y>&&>(r));
-                this->Swap(temp);
+                shared_ptr temp(static_cast<shared_ptr<Y>&&>(r));
+                swap(temp);
                 return *this;
             }
 
-            void Swap(SharedPointer& r) noexcept
+            // 20.8.2.2.4, modifiers:
+            void swap(shared_ptr& r) noexcept
             {
-                std::swap(this->pointer, r.pointer);
-                std::swap(this->header, r.header);
+                std::swap(ptr,r.ptr);
+                std::swap(header,r.header);
             }
-
-            void Reset() noexcept
+            void reset() noexcept
             {
-                if (this->header)
-                {
-                    this->header->DecrementCount();
+                if(header){
+                    header->dec_count();
                 }
-                this->Clear();
+                clear();
             }
 
-            template <typename Y>
-            void Reset(Y* p)
+            template<class Y> void reset(Y* p)
             {
-                SharedPointer temp(p);
-                this->Swap(temp);
+                shared_ptr temp(p);
+                swap(temp);
             }
 
-            template <typename Y, typename D>
-            void Reset(Y* p, D d)
+            template<class Y, class D> void reset(Y* p, D d)
             {
-                SharedPointer temp(p, d);
-                this->Swap(temp);
+                shared_ptr temp(p,d);
+                swap(temp);
             }
 
-            template <typename Y, typename D, typename A>
-            void Reset(Y* p, D d, A a);
-
-            T* Get() const noexcept
+            template<class Y, class D, class A> void reset(Y* p, D d, A a);
+            // 20.8.2.2.5, observers:
+            T* get() const noexcept
             {
-                return this->pointer;
+                return ptr;
             }
 
             T& operator*() const noexcept
             {
-                return *this->pointer;
+                return *ptr;
             }
 
             T* operator->() const noexcept
             {
-                return this->pointer;
+                return ptr;
+            }
+
+            long use_count() const noexcept
+            {
+                return header?header->use_count():0;
+            }
+
+            bool unique() const noexcept
+            {
+                return use_count()==1;
             }
 
             explicit operator bool() const noexcept
             {
-                return this->pointer;
+                return ptr;
+            }
+            template<class U> bool owner_before(shared_ptr<U> const& b) const;
+
+            friend inline bool operator==(shared_ptr const& lhs,shared_ptr const& rhs)
+            {
+                return lhs.ptr==rhs.ptr;
             }
 
-            uint32_t UseCount() const noexcept
+            friend inline bool operator!=(shared_ptr const& lhs,shared_ptr const& rhs)
             {
-                if (this->header)
-                {
-                    return this->header->UseCount();
-                }
-                else
-                {
-                    return 0;
-                }
+                return !(lhs==rhs);
             }
 
-            bool Unique() const noexcept
-            {
-                return this->UseCount() == 1;
-            }
-
-            friend inline bool operator==(SharedPointer const& lhs, SharedPointer const& rhs)
-            {
-                return lhs.pointer == rhs.pointer;
-            }
-
-            friend inline bool operator!=(SharedPointer const& lhs, SharedPointer const& rhs)
-            {
-                return !(lhs == rhs);
-            }
     };
 
-    template <typename T>
-    class AtomicSharedPointer
+    template<typename T,typename ... Args>
+    shared_ptr<T> make_shared(Args&& ... args){
+        return shared_ptr<T>(
+                new shared_ptr_header_combined<T>(
+                        static_cast<Args&&>(args)...));
+    }
+
+#ifdef _MSC_VER
+    #define JSS_ASP_ALIGN_TO(alignment) __declspec(align(alignment))
+#ifdef _WIN64
+#define JSS_ASP_BITFIELD_SIZE 32
+#else
+#define JSS_ASP_BITFIELD_SIZE 16
+#endif
+#else
+#define JSS_ASP_ALIGN_TO(alignment) __attribute__((aligned(alignment)))
+#ifdef __LP64__
+#define JSS_ASP_BITFIELD_SIZE 32
+#else
+#define JSS_ASP_BITFIELD_SIZE 16
+#endif
+#endif
+
+    template <class T>
+    class atomic_shared_ptr
     {
-        private:
-            struct alignas(16) CountedPointer
-            {
-                uint32_t access_count;
-                uint32_t index;
-                SharedPointerHeaderBlockBase* pointer;
+            template<typename U>
+            friend class atomic_shared_ptr;
 
-                CountedPointer() noexcept : access_count(0), index(0), pointer(nullptr)
-                {
-                }
+            struct alignas(16) counted_ptr{
+                unsigned access_count;
+                unsigned index;
+                shared_ptr_header_block_base* ptr;
 
-                CountedPointer(uint32_t access_count, uint32_t index, SharedPointerHeaderBlockBase* pointer) noexcept :
-                        access_count(access_count), index(index), pointer(pointer)
-                {
-                }
+                counted_ptr() noexcept:
+                        access_count(0),index(0),ptr(nullptr)
+                {}
+
+                counted_ptr(shared_ptr_header_block_base* ptr_,unsigned index_):
+                        access_count(0),index(index_),ptr(ptr_)
+                {}
             };
 
-            class LocalAccess
-            {
-                public:
-                    A128::Atomic128<CountedPointer>& counted_pointer;
-                    CountedPointer value;
+            mutable A128::Atomic128<counted_ptr> p;
 
-                    LocalAccess() = delete;
+            struct local_access{
+                A128::Atomic128<counted_ptr>& p;
+                counted_ptr val;
 
-                    LocalAccess(A128::Atomic128<CountedPointer>& counted_pointer) noexcept :
-                            counted_pointer(counted_pointer), value(counted_pointer.Load())
-                    {
-                        this->Acquire();
+                void acquire(std::memory_order order){
+                    if(!val.ptr)
+                        return;
+                    for(;;){
+                        counted_ptr newval=val;
+                        ++newval.access_count;
+                        if(p.CompareExchange(val,newval,order))
+                            break;
                     }
+                    ++val.access_count;
+                }
 
-                    ~LocalAccess()
-                    {
-                        this->Release();
-                    }
+                local_access(
+                        A128::Atomic128<counted_ptr>& p_,
+                        std::memory_order order=std::memory_order_relaxed):
+                        p(p_),val(p.Load(order))
+                {
+                    acquire(order);
+                }
 
-                    void Acquire()
-                    {
-                        if (!this->value.pointer)
-                        {
-                            return;
-                        }
-                        while (true)
-                        {
-                            CountedPointer next = this->value;
-                            ++next.access_count;
-                            if (this->counted_pointer.CompareExchange(this->value, next))
-                            {
-                                break;
-                            }
-                        }
-                        ++this->value.access_count;
-                    }
+                ~local_access()
+                {
+                    release();
+                }
 
-                    void Release()
-                    {
-                        if (!this->value.pointer)
-                        {
-                            return;
-                        }
-                        CountedPointer target = this->value;
-                        do
-                        {
-                            CountedPointer next = target;
-                            --next.access_count;
-                            if (this->counted_pointer.CompareExchange(target, next))
-                            {
-                                break;
-                            }
-                        } while (target.pointer == this->value.pointer);
-                        if (target.pointer != this->value.pointer)
-                        {
-                            this->value.pointer->RemoveExternalCounter();
-                        }
+                void release(){
+                    if(!val.ptr)
+                        return;
+                    counted_ptr target=val;
+                    do{
+                        counted_ptr newval=target;
+                        --newval.access_count;
+                        if(p.CompareExchange(target,newval))
+                            break;
+                    }while(target.ptr==val.ptr);
+                    if(target.ptr!=val.ptr){
+                        val.ptr->remove_external_counter();
                     }
+                }
 
-                    void Refresh(CountedPointer next)
-                    {
-                        if (next.pointer == this->value.pointer)
-                        {
-                            return;
-                        }
-                        this->Release();
-                        this->value = next;
-                        this->Acquire();
-                    }
+                void refresh(counted_ptr newval,std::memory_order order){
+                    if(newval.ptr==val.ptr)
+                        return;
+                    release();
+                    val=newval;
+                    acquire(order);
+                }
 
-                    SharedPointerHeaderBlockBase* GetPointer() const
-                    {
-                        return this->value.pointer;
-                    }
+                shared_ptr_header_block_base* get_ptr()
+                {
+                    return val.ptr;
+                }
 
-                    SharedPointer<T> GetSharedPointer() const
-                    {
-                        return SharedPointer<T>(this->value.pointer, this->value.index);
-                    }
+                shared_ptr<T> get_shared_ptr()
+                {
+                    return shared_ptr<T>(val.ptr,val.index);
+                }
             };
-
-            mutable A128::Atomic128<CountedPointer> counted_pointer;
 
         public:
-            AtomicSharedPointer() noexcept = default;
 
-            AtomicSharedPointer(SharedPointer<T> value) noexcept
+            bool is_lock_free() const noexcept
             {
-                if (value.header)
-                {
-                    this->counted_pointer = CountedPointer(0, value.index, value.header->GetPointerIndex(value.pointer));
-                }
-                else
-                {
-                    this->counted_pointer = CountedPointer(0, value.index, nullptr);
-                }
-                value.header = nullptr;
-                value.pointer = nullptr;
+                return p.is_lock_free();
             }
 
-            AtomicSharedPointer(const AtomicSharedPointer&) = delete;
-
-            AtomicSharedPointer& operator=(const AtomicSharedPointer&) = delete;
-
-            SharedPointer<T> operator=(SharedPointer<T> next) noexcept
+            void store(
+                    shared_ptr<T> newptr,
+                    std::memory_order order= std::memory_order_seq_cst) /*noexcept*/
             {
-                this->Store(static_cast<SharedPointer<T>&&>(next));
-                return next;
-            }
-
-            SharedPointer<T> Load() const noexcept
-            {
-                LocalAccess local_access(this->counted_pointer);
-                return local_access.GetSharedPointer();
-            }
-
-            operator SharedPointer<T>() const noexcept
-            {
-                return this->Load();
-            }
-
-            void Store(SharedPointer<T> next) noexcept
-            {
-                uint32_t index = 0;
-                if (next.header)
-                {
-                    index = next.header->GetPointerIndex(next.pointer);
+                unsigned index=0;
+                if(newptr.header){
+                    index=newptr.header->get_ptr_index(newptr.ptr);
                 }
-                CountedPointer old = this->counted_pointer.Exchange(CountedPointer(0, index, next.header));
-                if (old.pointer)
-                {
-                    old.pointer->AddExternalCounters(old.access_count);
-                    old.pointer->DecrementCount();
+                counted_ptr old=p.Exchange(counted_ptr(newptr.header,index),order);
+                if(old.ptr){
+                    old.ptr->add_external_counters(old.access_count);
+                    old.ptr->dec_count();
                 }
-                next.Clear();
+                newptr.clear();
             }
 
-            SharedPointer<T> Exchange(SharedPointer<T> next) noexcept
+            shared_ptr<T> load(
+                    std::memory_order order= std::memory_order_seq_cst) const noexcept
             {
-                uint32_t index = 0;
-                if (next.header)
-                {
-                    index = next.header->GetPointerIndex(next.pointer);
-                }
-                CountedPointer old = this->counted_pointer.Exchange(CountedPointer(0, index, next.header));
-                SharedPointer<T> result(old.pointer, old.index);
-                if (old.pointer)
-                {
-                    old.pointer->AddExternalCounters(old.access_count);
-                    old.pointer->DecrementCount();
-                }
-                next.Clear();
-                return result;
+                local_access guard(p,order);
+                return guard.get_shared_ptr();
             }
 
-            bool CompareExchangeWeak(SharedPointer<T>& expected, SharedPointer<T> next) noexcept
+            operator shared_ptr<T>() const noexcept {
+                return load();
+            }
+
+            shared_ptr<T> exchange(
+                    shared_ptr<T> newptr,
+                    std::memory_order order= std::memory_order_seq_cst) /*noexcept*/
             {
-                LocalAccess local_access(this->counted_pointer);
-                if (local_access.GetPointer() != expected.header)
-                {
-                    expected = local_access.GetSharedPointer();
+                counted_ptr newval(
+                        newptr.header,
+                        newptr.header?newptr.header->get_ptr_index(newptr.ptr):0);
+                counted_ptr old=p.Exchange(newval,order);
+                shared_ptr<T> res(old.ptr,old.index);
+                if(old.ptr){
+                    old.ptr->add_external_counters(old.access_count);
+                    old.ptr->dec_count();
+                }
+                newptr.clear();
+                return res;
+            }
+
+            bool compare_exchange_weak(
+                    shared_ptr<T> & expected, shared_ptr<T> newptr,
+                    std::memory_order success_order=std::memory_order_seq_cst,
+                    std::memory_order failure_order=std::memory_order_seq_cst) /*noexcept*/
+            {
+                local_access guard(p);
+                if(guard.get_ptr()!=expected.header){
+                    expected=guard.get_shared_ptr();
                     return false;
                 }
-                uint32_t index = 0;
-                if (expected.header)
-                {
-                    index = expected.header->GetPointerIndex(expected.pointer);
-                }
-                CountedPointer expected_value = CountedPointer(0, index, expected.header);
-                if (local_access.value.index != expected_value.index)
-                {
-                    expected = local_access.GetSharedPointer();
+
+                counted_ptr expectedval(
+                        expected.header,
+                        expected.header?expected.header->get_ptr_index(expected.ptr):0);
+
+                if(guard.val.index!=expectedval.index){
+                    expected=guard.get_shared_ptr();
                     return false;
                 }
-                index = 0;
-                if (next.header)
-                {
-                    index = next.header->GetPointerIndex(next.pointer);
-                }
-                CountedPointer old_value(local_access.value);
-                CountedPointer new_value = CountedPointer(0, index, next.header);
-                if ((old_value.pointer == new_value.pointer) && (old_value.index == new_value.index))
-                {
+
+                counted_ptr oldval(guard.val);
+                counted_ptr newval(
+                        newptr.header,
+                        newptr.header?newptr.header->get_ptr_index(newptr.ptr):0);
+                if((oldval.ptr==newval.ptr) && (oldval.index==newval.index)){
                     return true;
                 }
-                if (this->counted_pointer.CompareExchange(old_value, new_value))
-                {
-                    if (old_value.pointer)
-                    {
-                        old_value.pointer->AddExternalCounters(old_value.access_count);
-                        old_value.pointer->DecrementCount();
+                if(p.CompareExchange(oldval,newval,success_order,failure_order)){
+                    if(oldval.ptr){
+                        oldval.ptr->add_external_counters(oldval.access_count);
+                        oldval.ptr->dec_count();
                     }
-                    next.Clear();
+                    newptr.clear();
                     return true;
                 }
-                else
-                {
-                    local_access.Refresh(old_value);
-                    expected = local_access.GetSharedPointer();
+                else{
+                    guard.refresh(oldval,failure_order);
+                    expected=guard.get_shared_ptr();
                     return false;
                 }
             }
 
-            bool CompareExchangeStrong(SharedPointer<T>& expected, SharedPointer<T> next) noexcept
+            bool compare_exchange_strong(
+                    shared_ptr<T> &expected,shared_ptr<T> newptr,
+                    std::memory_order success_order=std::memory_order_seq_cst,
+                    std::memory_order failure_order=std::memory_order_seq_cst) noexcept
             {
-                SharedPointer<T> local_expected = expected;
-                do
-                {
-                    if (this->CompareExchangeWeak(expected, next))
-                    {
+                shared_ptr<T> local_expected=expected;
+                do{
+                    if(compare_exchange_weak(expected,newptr,success_order,failure_order))
                         return true;
-                    }
-                } while (local_expected == expected);
+                }
+                while(expected==local_expected);
                 return false;
             }
+
+            atomic_shared_ptr() noexcept = default;
+            atomic_shared_ptr( shared_ptr<T> val) /*noexcept*/:
+                    p(counted_ptr(val.header,val.header?val.header->get_ptr_index(val.ptr):0))
+            {
+                val.header=nullptr;
+                val.ptr=nullptr;
+            }
+
+            ~atomic_shared_ptr()
+            {
+                counted_ptr old=p.Load(std::memory_order_relaxed);
+                if(old.ptr)
+                    old.ptr->dec_count();
+            }
+
+            atomic_shared_ptr(const atomic_shared_ptr&) = delete;
+            atomic_shared_ptr& operator=(const atomic_shared_ptr&) = delete;
+            shared_ptr<T> operator=(shared_ptr<T> newval) noexcept
+            {
+                store(static_cast<shared_ptr<T>&&>(newval));
+                return newval;
+            }
+
     };
 
-    template <typename T>
-    class MarkableAtomicSharedPointer
+    template <class T>
+    class markable_atomic_shared_ptr
     {
-        private:
-            struct alignas(16) CountedPointer
-            {
-                uint32_t access_count;
-                uint32_t index;
-                SharedPointerHeaderBlockBase* pointer;
+            template<typename U>
+            friend class markable_atomic_shared_ptr;
 
-                CountedPointer() noexcept : access_count(0), index(0), pointer(nullptr)
-                {
-                }
+            class alignas(16) counted_ptr{
+                private:
+                    shared_ptr_header_block_base* ptr;
 
-                CountedPointer(uint32_t access_count, uint32_t index, SharedPointerHeaderBlockBase* pointer) noexcept :
-                        access_count(access_count), index(index), pointer(pointer)
-                {
-                }
-            };
-
-            class LocalAccess
-            {
                 public:
-                    A128::Atomic128<CountedPointer>& counted_pointer;
-                    CountedPointer value;
+                    unsigned access_count;
+                    unsigned index;
                     static const uintptr_t mask = (uintptr_t)1 << ((sizeof(uintptr_t) * 8) - 1);
 
-                    LocalAccess() = delete;
+                    counted_ptr() noexcept:
+                            ptr(nullptr),access_count(0),index(0)
+                    {}
 
-                    LocalAccess(A128::Atomic128<CountedPointer>& counted_pointer) noexcept :
-                            counted_pointer(counted_pointer), value(counted_pointer.Load())
+                    counted_ptr(shared_ptr_header_block_base* ptr_,unsigned index_):
+                            ptr(ptr_),access_count(0),index(index_)
+                    {}
+
+                    void set_mark()
                     {
-                        this->Acquire();
+                        uintptr_t value = (uintptr_t)ptr;
+                        value |= mask;
+                        ptr = (shared_ptr_header_block_base*)value;
                     }
 
-                    ~LocalAccess()
+                    void clear_mark()
                     {
-                        this->Release();
+                        uintptr_t value = (uintptr_t)ptr;
+                        value &= ~mask;
+                        ptr = (shared_ptr_header_block_base*)value;
                     }
 
-                    void Acquire()
+                    shared_ptr_header_block_base* get_ptr()
                     {
-                        if (!this->value.pointer)
-                        {
-                            return;
-                        }
-                        while (true)
-                        {
-                            CountedPointer next = this->value;
-                            ++next.access_count;
-                            if (this->counted_pointer.CompareExchange(this->value, next))
-                            {
-                                break;
-                            }
-                        }
-                        ++this->value.access_count;
+                        uintptr_t value = (uintptr_t)ptr;
+                        value &= ~mask;
+                        return (shared_ptr_header_block_base*)value;
                     }
 
-                    void Release()
+                    shared_ptr_header_block_base* get_marked_ptr()
                     {
-                        if (!this->value.pointer)
-                        {
-                            return;
-                        }
-                        CountedPointer target = this->value;
-                        do
-                        {
-                            CountedPointer next = target;
-                            --next.access_count;
-                            if (this->counted_pointer.CompareExchange(target, next))
-                            {
-                                break;
-                            }
-                        } while (target.pointer == this->value.pointer);
-                        if (target.pointer != this->value.pointer)
-                        {
-                            this->value.pointer->RemoveExternalCounter();
-                        }
+                        return ptr;
                     }
 
-                    void Refresh(CountedPointer next)
+                    bool is_marked() const
                     {
-                        if (next.pointer == this->value.pointer)
-                        {
-                            return;
-                        }
-                        this->Release();
-                        this->value = next;
-                        this->Acquire();
-                    }
-
-                    SharedPointerHeaderBlockBase* GetPointer() const
-                    {
-                        uintptr_t val = (uintptr_t)this->value.pointer;
-                        val &= ~LocalAccess::mask;
-                        return (SharedPointerHeaderBlockBase*)val;
-                    }
-
-                    bool IsMarked() const
-                    {
-                        uintptr_t val = (uintptr_t)this->value.pointer;
-                        return val & LocalAccess::mask;
-                    }
-
-                    SharedPointer<T> GetSharedPointer() const
-                    {
-                        uintptr_t val = (uintptr_t)this->value.pointer;
-                        val &= ~LocalAccess::mask;
-                        return SharedPointer<T>((SharedPointerHeaderBlockBase*)val, this->value.index);
+                        uintptr_t value = (uintptr_t)ptr;
+                        return value & mask;
                     }
             };
 
-            mutable A128::Atomic128<CountedPointer> counted_pointer;
+            mutable A128::Atomic128<counted_ptr> p;
+
+            struct local_access{
+                A128::Atomic128<counted_ptr>& p;
+                counted_ptr val;
+
+                void acquire(std::memory_order order){
+                    if(!val.get_ptr())
+                        return;
+                    for(;;){
+                        counted_ptr newval=val;
+                        ++newval.access_count;
+                        if(p.CompareExchange(val,newval))
+                            break;
+                    }
+                    ++val.access_count;
+                }
+
+                local_access(
+                        A128::Atomic128<counted_ptr>& p_,
+                        std::memory_order order=std::memory_order_relaxed):
+                        p(p_),val(p.Load())
+                {
+                    acquire(order);
+                }
+
+                ~local_access()
+                {
+                    release();
+                }
+
+                void release(){
+                    if(!val.get_ptr())
+                        return;
+                    counted_ptr target=val;
+                    do{
+                        counted_ptr newval=target;
+                        --newval.access_count;
+                        if(p.CompareExchange(target,newval))
+                            break;
+                    }while(target.get_ptr()==val.get_ptr());
+                    if(target.get_ptr()!=val.get_ptr()){
+                        val.get_ptr()->remove_external_counter();
+                    }
+                }
+
+                void refresh(counted_ptr newval,std::memory_order order){
+                    if(newval.get_ptr()==val.get_ptr())
+                        return;
+                    release();
+                    val=newval;
+                    acquire(order);
+                }
+
+                shared_ptr_header_block_base* get_ptr()
+                {
+                    return val.get_ptr();
+                }
+
+                shared_ptr<T> get_shared_ptr()
+                {
+                    return shared_ptr<T>(val.get_ptr(), val.index);
+                }
+
+                bool is_marked() const
+                {
+                    return val.is_marked();
+                }
+            };
 
         public:
-            MarkableAtomicSharedPointer() noexcept = default;
 
-            MarkableAtomicSharedPointer(SharedPointer<T> value) noexcept
+            bool is_lock_free() const noexcept
             {
-                if (value.header)
-                {
-                    this->counted_pointer = CountedPointer(0, value.index, value.header->GetPointerIndex(value.pointer));
+                return p.is_lock_free();
+            }
+
+            void store(
+                    shared_ptr<T> newptr,
+                    std::memory_order order= std::memory_order_seq_cst) /*noexcept*/
+            {
+                unsigned index=0;
+                if(newptr.header){
+                    index=newptr.header->get_ptr_index(newptr.ptr);
                 }
-                else
-                {
-                    this->counted_pointer = CountedPointer(0, value.index, nullptr);
+                counted_ptr old=p.Exchange(counted_ptr(newptr.header,index));
+                if(old.get_ptr()){
+                    old.get_ptr()->add_external_counters(old.access_count);
+                    old.get_ptr()->dec_count();
                 }
-                value.header = nullptr;
-                value.pointer = nullptr;
+                newptr.clear();
             }
 
-            MarkableAtomicSharedPointer(const MarkableAtomicSharedPointer&) = delete;
-
-            MarkableAtomicSharedPointer& operator=(const MarkableAtomicSharedPointer&) = delete;
-
-            SharedPointer<T> operator=(SharedPointer<T> next) noexcept
+            shared_ptr<T> load(
+                    std::memory_order order= std::memory_order_seq_cst) const noexcept
             {
-                this->Store(static_cast<SharedPointer<T>&&>(next));
-                return next;
+                local_access guard(p,order);
+                return guard.get_shared_ptr();
             }
 
-            SharedPointer<T> Load() const noexcept
-            {
-                LocalAccess local_access(this->counted_pointer);
-                return local_access.GetSharedPointer();
+            operator shared_ptr<T>() const noexcept {
+                return load();
             }
 
-            operator SharedPointer<T>() const noexcept
+            bool is_marked() const noexcept
             {
-                return this->Load();
+                local_access la(p);
+                return la.is_marked();
             }
 
-            bool IsMarked() const noexcept
+            std::pair<shared_ptr<T>, bool> load_marked() const noexcept
             {
-                LocalAccess local_access(this->counted_pointer);
-                return local_access.IsMarked();
+                local_access la(this->p);
+                return std::make_pair(la.get_shared_ptr(), la.is_marked());
             }
 
-            std::pair<SharedPointer<T>, bool> LoadMarked() const noexcept
+            shared_ptr<T> exchange(
+                    shared_ptr<T> newptr,
+                    std::memory_order order= std::memory_order_seq_cst) /*noexcept*/
             {
-                LocalAccess local_access(this->counted_pointer);
-                return std::make_pair(local_access.GetSharedPointer(), local_access.IsMarked());
-            }
-
-            void Store(SharedPointer<T> next) noexcept
-            {
-                uint32_t index = 0;
-                if (next.header)
-                {
-                    index = next.header->GetPointerIndex(next.pointer);
+                counted_ptr newval(
+                        newptr.header,
+                        newptr.header?newptr.header->get_ptr_index(newptr.ptr):0);
+                counted_ptr old=p.Exchange(newval,order);
+                shared_ptr<T> res(old.get_ptr(),old.index);
+                if(old.get_ptr()){
+                    old.get_ptr()->add_external_counters(old.access_count);
+                    old.get_ptr()->dec_count();
                 }
-                CountedPointer old = this->counted_pointer.Exchange(CountedPointer(0, index, next.header));
-                if (old.pointer)
-                {
-                    old.pointer->AddExternalCounters(old.access_count);
-                    old.pointer->DecrementCount();
-                }
-                next.Clear();
+                newptr.clear();
+                return res;
             }
 
-            void SetMark() noexcept
+            void set_mark() noexcept
             {
-                LocalAccess local_access(this->counted_pointer);
+                local_access la(this->p);
                 while (true)
                 {
-                    CountedPointer next = local_access.value;
-                    next.pointer = (SharedPointerHeaderBlockBase*)((uintptr_t)next.pointer | LocalAccess::mask);
-                    if (this->counted_pointer.CompareExchange(local_access.value, next))
+                    counted_ptr next = la.val;
+                    next.set_mark();
+                    if (this->p.CompareExchange(la.val, next))
                     {
                         break;
                     }
                 }
             }
 
-            SharedPointer<T> Exchange(SharedPointer<T> next) noexcept
+            bool test_and_set_mark(
+                    shared_ptr<T> & expected,
+                    std::memory_order success_order=std::memory_order_seq_cst,
+                    std::memory_order failure_order=std::memory_order_seq_cst) /*noexcept*/
             {
-                uint32_t index = 0;
-                if (next.header)
-                {
-                    index = next.header->GetPointerIndex(next.pointer);
+                local_access guard(p);
+                if(guard.get_ptr()!=expected.header){
+                    expected=guard.get_shared_ptr();
+                    return false;
                 }
-                CountedPointer old = this->counted_pointer.Exchange(CountedPointer(0, index, next.header));
-                SharedPointer<T> result(old.pointer, old.index);
-                if (old.pointer)
-                {
-                    old.pointer->AddExternalCounters(old.access_count);
-                    old.pointer->DecrementCount();
-                }
-                next.Clear();
-                return result;
-            }
 
-            bool TestAndSetMark(SharedPointer<T>& expected)
-            {
-                LocalAccess local_access(this->counted_pointer);
-                if (local_access.GetPointer() != expected.header)
-                {
-                    expected = local_access.GetSharedPointer();
+                counted_ptr expectedval(
+                        expected.header,
+                        expected.header?expected.header->get_ptr_index(expected.ptr):0);
+
+                if(guard.val.index!=expectedval.index){
+                    expected=guard.get_shared_ptr();
                     return false;
                 }
-                uint32_t index = 0;
-                if (expected.header)
-                {
-                    index = expected.header->GetPointerIndex(expected.pointer);
-                }
-                CountedPointer expected_value = CountedPointer(0, index, expected.header);
-                if (local_access.value.index != expected_value.index)
-                {
-                    expected = local_access.GetSharedPointer();
-                    return false;
-                }
-                CountedPointer old_value(local_access.value);
-                CountedPointer new_value = CountedPointer(0, index, expected.header);
-                new_value.pointer = (SharedPointerHeaderBlockBase*)((uintptr_t)new_value.pointer | LocalAccess::mask);
-                if ((old_value.pointer == new_value.pointer) && (old_value.index == new_value.index))
-                {
+
+                counted_ptr oldval(guard.val);
+                counted_ptr newval(
+                        expected.header,
+                        expected.header?expected.header->get_ptr_index(expected.ptr):0);
+                newval.set_mark();
+                if((oldval.get_marked_ptr()==newval.get_marked_ptr()) && (oldval.index==newval.index)){
                     return true;
                 }
-                if (this->counted_pointer.CompareExchange(old_value, new_value))
-                {
+                if(p.CompareExchange(oldval,newval)){
                     return true;
                 }
-                else
-                {
-                    local_access.Refresh(old_value);
-                    expected = local_access.GetSharedPointer();
+                else{
+                    guard.refresh(oldval,failure_order);
+                    expected=guard.get_shared_ptr();
                     return false;
                 }
             }
 
-            bool CompareExchangeWeak(SharedPointer<T>& expected, SharedPointer<T> next) noexcept
+            bool compare_exchange_weak(
+                    shared_ptr<T> & expected, shared_ptr<T> newptr,
+                    std::memory_order success_order=std::memory_order_seq_cst,
+                    std::memory_order failure_order=std::memory_order_seq_cst) /*noexcept*/
             {
-                LocalAccess local_access(this->counted_pointer);
-                if (local_access.GetPointer() != expected.header)
-                {
-                    expected = local_access.GetSharedPointer();
+                local_access guard(p);
+                if(guard.get_ptr()!=expected.header){
+                    expected=guard.get_shared_ptr();
                     return false;
                 }
-                uint32_t index = 0;
-                if (expected.header)
-                {
-                    index = expected.header->GetPointerIndex(expected.pointer);
-                }
-                CountedPointer expected_value = CountedPointer(0, index, expected.header);
-                if (local_access.value.index != expected_value.index)
-                {
-                    expected = local_access.GetSharedPointer();
+
+                counted_ptr expectedval(
+                        expected.header,
+                        expected.header?expected.header->get_ptr_index(expected.ptr):0);
+
+                if(guard.val.index!=expectedval.index){
+                    expected=guard.get_shared_ptr();
                     return false;
                 }
-                index = 0;
-                if (next.header)
-                {
-                    index = next.header->GetPointerIndex(next.pointer);
-                }
-                CountedPointer old_value(local_access.value);
-                CountedPointer new_value = CountedPointer(0, index, next.header);
-                if ((old_value.pointer == new_value.pointer) && (old_value.index == new_value.index))
-                {
+
+                counted_ptr oldval(guard.val);
+                counted_ptr newval(
+                        newptr.header,
+                        newptr.header?newptr.header->get_ptr_index(newptr.ptr):0);
+                if((oldval.get_marked_ptr()==newval.get_marked_ptr()) && (oldval.index==newval.index)){
                     return true;
                 }
-                if (this->counted_pointer.CompareExchange(old_value, new_value))
-                {
-                    if (old_value.pointer)
-                    {
-                        old_value.pointer->AddExternalCounters(old_value.access_count);
-                        old_value.pointer->DecrementCount();
+                if(p.CompareExchange(oldval,newval)){
+                    if(oldval.get_ptr()){
+                        oldval.get_ptr()->add_external_counters(oldval.access_count);
+                        oldval.get_ptr()->dec_count();
                     }
-                    next.Clear();
+                    newptr.clear();
                     return true;
                 }
-                else
-                {
-                    local_access.Refresh(old_value);
-                    expected = local_access.GetSharedPointer();
+                else{
+                    guard.refresh(oldval,failure_order);
+                    expected=guard.get_shared_ptr();
                     return false;
                 }
             }
 
-            bool CompareExchangeStrong(SharedPointer<T>& expected, SharedPointer<T> next) noexcept
+            bool compare_exchange_strong(
+                    shared_ptr<T> &expected,shared_ptr<T> newptr,
+                    std::memory_order success_order=std::memory_order_seq_cst,
+                    std::memory_order failure_order=std::memory_order_seq_cst) noexcept
             {
-                SharedPointer<T> local_expected = expected;
-                do
-                {
-                    if (this->CompareExchangeWeak(expected, next))
-                    {
+                shared_ptr<T> local_expected=expected;
+                do{
+                    if(compare_exchange_weak(expected,newptr,success_order,failure_order))
                         return true;
-                    }
-                } while (local_expected == expected);
+                }
+                while(expected==local_expected);
                 return false;
             }
-    };
 
-    template <typename T,typename ... Args>
-    SharedPointer<T> MakeShared(Args&& ... args)
-    {
-        return SharedPointer<T>(new SharedPointerHeaderCombined<T>(static_cast<Args&&>(args)...));
-    }
+            markable_atomic_shared_ptr() noexcept = default;
+            markable_atomic_shared_ptr( shared_ptr<T> val) /*noexcept*/:
+                    p(counted_ptr(val.header,val.header?val.header->get_ptr_index(val.ptr):0))
+            {
+                val.header=nullptr;
+                val.ptr=nullptr;
+            }
+
+            ~markable_atomic_shared_ptr()
+            {
+                counted_ptr old=p.Load();
+                if(old.get_ptr())
+                    old.get_ptr()->dec_count();
+            }
+
+            markable_atomic_shared_ptr(const markable_atomic_shared_ptr&) = delete;
+            markable_atomic_shared_ptr& operator=(const markable_atomic_shared_ptr&) = delete;
+            shared_ptr<T> operator=(shared_ptr<T> newval) noexcept
+            {
+                store(static_cast<shared_ptr<T>&&>(newval));
+                return newval;
+            }
+
+    };
 }
 
-#endif // __CSLPQ_POINTERS_HPP__
+#endif
