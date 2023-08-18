@@ -96,7 +96,7 @@ namespace CSLPQ
 
             bool CompareExchange(int level, SPtr& old_value, SPtr new_value)
             {
-                return this->next[level].compare_exchange_strong(old_value, new_value);
+                return this->next[level].compare_exchange_weak(old_value, new_value);
             }
 
             void SetDoneInserting()

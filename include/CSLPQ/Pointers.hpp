@@ -777,53 +777,19 @@ namespace jss{
             friend class markable_atomic_shared_ptr;
 
             class alignas(16) counted_ptr{
-                private:
+                public:
+                    uint32_t access_count : 32;
+                    uint32_t index : 31;
+                    bool mark: 1;
                     shared_ptr_header_block_base* ptr;
 
-                public:
-                    unsigned access_count;
-                    unsigned index;
-                    static const uintptr_t mask = (uintptr_t)1 << ((sizeof(uintptr_t) * 8) - 1);
-
                     counted_ptr() noexcept:
-                            ptr(nullptr),access_count(0),index(0)
+                            access_count(0),index(0),mark(false),ptr(nullptr)
                     {}
 
                     counted_ptr(shared_ptr_header_block_base* ptr_,unsigned index_):
-                            ptr(ptr_),access_count(0),index(index_)
+                            access_count(0),index(index_),mark(false),ptr(ptr_)
                     {}
-
-                    void set_mark()
-                    {
-                        uintptr_t value = (uintptr_t)ptr;
-                        value |= mask;
-                        ptr = (shared_ptr_header_block_base*)value;
-                    }
-
-                    void clear_mark()
-                    {
-                        uintptr_t value = (uintptr_t)ptr;
-                        value &= ~mask;
-                        ptr = (shared_ptr_header_block_base*)value;
-                    }
-
-                    shared_ptr_header_block_base* get_ptr()
-                    {
-                        uintptr_t value = (uintptr_t)ptr;
-                        value &= ~mask;
-                        return (shared_ptr_header_block_base*)value;
-                    }
-
-                    shared_ptr_header_block_base* get_marked_ptr()
-                    {
-                        return ptr;
-                    }
-
-                    bool is_marked() const
-                    {
-                        uintptr_t value = (uintptr_t)ptr;
-                        return value & mask;
-                    }
             };
 
             mutable A128::Atomic128<counted_ptr> p;
@@ -833,7 +799,7 @@ namespace jss{
                 counted_ptr val;
 
                 void acquire(std::memory_order order){
-                    if(!val.get_ptr())
+                    if(!val.ptr)
                         return;
                     for(;;){
                         counted_ptr newval=val;
@@ -858,7 +824,7 @@ namespace jss{
                 }
 
                 void release(){
-                    if(!val.get_ptr())
+                    if(!val.ptr)
                         return;
                     counted_ptr target=val;
                     do{
@@ -866,14 +832,14 @@ namespace jss{
                         --newval.access_count;
                         if(p.CompareExchange(target,newval))
                             break;
-                    }while(target.get_ptr()==val.get_ptr());
-                    if(target.get_ptr()!=val.get_ptr()){
-                        val.get_ptr()->remove_external_counter();
+                    }while(target.ptr==val.ptr);
+                    if(target.ptr!=val.ptr){
+                        val.ptr->remove_external_counter();
                     }
                 }
 
                 void refresh(counted_ptr newval,std::memory_order order){
-                    if(newval.get_ptr()==val.get_ptr())
+                    if(newval.ptr==val.ptr)
                         return;
                     release();
                     val=newval;
@@ -882,17 +848,17 @@ namespace jss{
 
                 shared_ptr_header_block_base* get_ptr()
                 {
-                    return val.get_ptr();
+                    return val.ptr;
                 }
 
                 shared_ptr<T> get_shared_ptr()
                 {
-                    return shared_ptr<T>(val.get_ptr(), val.index);
+                    return shared_ptr<T>(val.ptr,val.index);
                 }
 
                 bool is_marked() const
                 {
-                    return val.is_marked();
+                    return val.mark == true;
                 }
             };
 
@@ -912,9 +878,9 @@ namespace jss{
                     index=newptr.header->get_ptr_index(newptr.ptr);
                 }
                 counted_ptr old=p.Exchange(counted_ptr(newptr.header,index));
-                if(old.get_ptr()){
-                    old.get_ptr()->add_external_counters(old.access_count);
-                    old.get_ptr()->dec_count();
+                if(old.ptr){
+                    old.ptr->add_external_counters(old.access_count);
+                    old.ptr->dec_count();
                 }
                 newptr.clear();
             }
@@ -930,16 +896,16 @@ namespace jss{
                 return load();
             }
 
-            bool is_marked() const noexcept
+            bool is_marked(std::memory_order order= std::memory_order_seq_cst) const noexcept
             {
-                local_access la(p);
-                return la.is_marked();
+                local_access guard(p,order);
+                return guard.is_marked();
             }
 
-            std::pair<shared_ptr<T>, bool> load_marked() const noexcept
+            std::pair<shared_ptr<T>, bool> load_marked(std::memory_order order= std::memory_order_seq_cst) const noexcept
             {
-                local_access la(this->p);
-                return std::make_pair(la.get_shared_ptr(), la.is_marked());
+                local_access guard(p,order);
+                return std::make_pair(guard.get_shared_ptr(), guard.is_marked());
             }
 
             shared_ptr<T> exchange(
@@ -950,10 +916,10 @@ namespace jss{
                         newptr.header,
                         newptr.header?newptr.header->get_ptr_index(newptr.ptr):0);
                 counted_ptr old=p.Exchange(newval,order);
-                shared_ptr<T> res(old.get_ptr(),old.index);
-                if(old.get_ptr()){
-                    old.get_ptr()->add_external_counters(old.access_count);
-                    old.get_ptr()->dec_count();
+                shared_ptr<T> res(old.ptr,old.index);
+                if(old.ptr){
+                    old.ptr->add_external_counters(old.access_count);
+                    old.ptr->dec_count();
                 }
                 newptr.clear();
                 return res;
@@ -961,12 +927,13 @@ namespace jss{
 
             void set_mark() noexcept
             {
-                local_access la(this->p);
                 while (true)
                 {
-                    counted_ptr next = la.val;
-                    next.set_mark();
-                    if (this->p.CompareExchange(la.val, next))
+                    local_access la(p);
+                    counted_ptr orig = la.val;
+                    counted_ptr next = orig;
+                    next.mark = true;
+                    if (p.CompareExchange(orig, next))
                     {
                         break;
                     }
@@ -979,28 +946,9 @@ namespace jss{
                     std::memory_order failure_order=std::memory_order_seq_cst) /*noexcept*/
             {
                 local_access guard(p);
-                if(guard.get_ptr()!=expected.header){
-                    expected=guard.get_shared_ptr();
-                    return false;
-                }
-
-                counted_ptr expectedval(
-                        expected.header,
-                        expected.header?expected.header->get_ptr_index(expected.ptr):0);
-
-                if(guard.val.index!=expectedval.index){
-                    expected=guard.get_shared_ptr();
-                    return false;
-                }
-
                 counted_ptr oldval(guard.val);
-                counted_ptr newval(
-                        expected.header,
-                        expected.header?expected.header->get_ptr_index(expected.ptr):0);
-                newval.set_mark();
-                if((oldval.get_marked_ptr()==newval.get_marked_ptr()) && (oldval.index==newval.index)){
-                    return true;
-                }
+                counted_ptr newval = oldval;
+                newval.mark = true;
                 if(p.CompareExchange(oldval,newval)){
                     return true;
                 }
@@ -1032,16 +980,17 @@ namespace jss{
                 }
 
                 counted_ptr oldval(guard.val);
+                oldval.mark = false;
                 counted_ptr newval(
                         newptr.header,
                         newptr.header?newptr.header->get_ptr_index(newptr.ptr):0);
-                if((oldval.get_marked_ptr()==newval.get_marked_ptr()) && (oldval.index==newval.index)){
+                if((oldval.ptr==newval.ptr) && (oldval.index==newval.index) && (oldval.mark == newval.mark)){
                     return true;
                 }
                 if(p.CompareExchange(oldval,newval)){
-                    if(oldval.get_ptr()){
-                        oldval.get_ptr()->add_external_counters(oldval.access_count);
-                        oldval.get_ptr()->dec_count();
+                    if(oldval.ptr){
+                        oldval.ptr->add_external_counters(oldval.access_count);
+                        oldval.ptr->dec_count();
                     }
                     newptr.clear();
                     return true;
@@ -1078,8 +1027,8 @@ namespace jss{
             ~markable_atomic_shared_ptr()
             {
                 counted_ptr old=p.Load();
-                if(old.get_ptr())
-                    old.get_ptr()->dec_count();
+                if(old.ptr)
+                    old.ptr->dec_count();
             }
 
             markable_atomic_shared_ptr(const markable_atomic_shared_ptr&) = delete;
