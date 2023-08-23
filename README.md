@@ -24,7 +24,7 @@ include(ExternalProject)
 set(EXTERNAL_INSTALL_LOCATION ${CMAKE_BINARY_DIR}/external)
 ExternalProject_Add(
     CSLPQ
-    GIT_REPOSITORY https://github.com/mewais/ConcurrentSkipListPriorityQueue
+    GIT_REPOSITORY https://github.com/mewais/CSLPQ
     CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${EXTERNAL_INSTALL_LOCATION}
 )
 
