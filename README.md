@@ -40,10 +40,12 @@ CSLPQ::KVQueue<KeyType, ValueType> kvqueue;
 kvqueue.Push(key);          // Inserts default value
 kvqueue.Push(key, value);   // Inserts value
 bool success = kvqueue.TryPop(key, value);       // Fills key and value and returns true if queue is not empty
+std::string str = kvqueue.ToString(bool all_levels = false);   // Returns a string representation of the queue. enabling all levels will print all levels of the skiplist, otherwise only the first level is printed
 
 CSLPQ::KQueue<KeyType> queue;
 queue.Push(key);
 bool success = queue.TryPop(key);       // Fills key and returns true if queue is not empty
+std::string str = queue.ToString(bool all_levels = false);   // Returns a string representation of the queue. enabling all levels will print all levels of the skiplist, otherwise only the first level is printed
 ```
 
 Because of dependency on Atomic128, you must compile with the `-Wno-strict-aliasing` flag enabled.
