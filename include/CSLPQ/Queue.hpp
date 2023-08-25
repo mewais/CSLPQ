@@ -157,8 +157,25 @@ namespace CSLPQ
             }
 
         public:
-            Queue(int max_level = 4) : max_level(max_level), head(new Node<K>(K(), max_level + 1))
+            explicit Queue(int max_level = 4) : max_level(max_level), head(new Node<K>(K(), max_level + 1))
             {
+            }
+
+            Queue(const Queue&) = delete;
+
+            Queue(Queue&& other)  noexcept : max_level(other.max_level), head(other.head)
+            {
+                other.head = nullptr;
+            }
+
+            Queue& operator=(const Queue&) = delete;
+
+            Queue& operator=(Queue&& other) noexcept
+            {
+                this->max_level = other.max_level;
+                this->head = other.head;
+                other.head = nullptr;
+                return *this;
             }
 
             void Push(const K& priority)
@@ -412,6 +429,23 @@ namespace CSLPQ
         public:
             KVQueue(int max_level = 4) : max_level(max_level), head(new KVNode<K, V>(K(), max_level + 1))
             {
+            }
+
+            KVQueue(const KVQueue&) = delete;
+
+            KVQueue(KVQueue&& other)  noexcept : max_level(other.max_level), head(other.head)
+            {
+                other.head = nullptr;
+            }
+
+            KVQueue& operator=(const KVQueue&) = delete;
+
+            KVQueue& operator=(KVQueue&& other) noexcept
+            {
+                this->max_level = other.max_level;
+                this->head = other.head;
+                other.head = nullptr;
+                return *this;
             }
 
             void Push(const K& priority)
