@@ -4,12 +4,11 @@
 #include <set>
 #include <algorithm>
 
-#include "CSLPQ/Node.hpp"
 #include "CSLPQ/Queue.hpp"
 
 #define COUNT 100000
 
-CSLPQ::Queue<uint64_t, void*> queue;
+CSLPQ::KVQueue<uint64_t, void*> queue;
 std::vector<uint64_t> keys;
 std::set<uint64_t> keys_ref;
 

@@ -9,7 +9,7 @@
 
 #define COUNT 100000
 
-CSLPQ::Queue<uint64_t, uint64_t> queue;
+CSLPQ::KVQueue<uint64_t, uint64_t> queue;
 std::vector<std::vector<std::pair<uint64_t, uint64_t>>> keys;
 std::set<std::pair<uint64_t, uint64_t>> keys_ref;
 std::barrier barrier(11);

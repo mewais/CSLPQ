@@ -7,7 +7,7 @@ The queue started with fine grained locks, then later switched to a lock-free CA
 The library is in working order, and currently being used in the [DCSim simulator](https://github.com/DCArch/DCSim). If you encounter any bugs, please open an issue.
 
 ## Features
-- Templated Key/Value priority queue
+- Templated Key or Key/Value priority queues
 - Uses skiplists for faster insertion/deletion
 - A C++ header only implementation
 - Thread safe.
@@ -34,7 +34,19 @@ target_include_directories(${PROJECT_NAME} PUBLIC ${EXTERNAL_INSTALL_LOCATION}/i
 Then in your code simply include the following:
 ```cpp
 #include "CSLPQ/Queue.hpp"
+
+// Example usage
+CSLPQ::KVQueue<KeyType, ValueType> kvqueue;
+kvqueue.Push(key);          // Inserts default value
+kvqueue.Push(key, value);   // Inserts value
+bool success = kvqueue.TryPop(key, value);       // Fills key and value and returns true if queue is not empty
+
+CSLPQ::KQueue<KeyType> queue;
+queue.Push(key);
+bool success = queue.TryPop(key);       // Fills key and returns true if queue is not empty
 ```
+
+Because of dependency on Atomic128, you must compile with the `-Wno-strict-aliasing` flag enabled.
 
 ## License
 The atomic_shared_ptr library is licensed under the BSD license. The rest is licensed under the MIT license.
