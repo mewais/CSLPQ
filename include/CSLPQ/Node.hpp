@@ -20,7 +20,7 @@ namespace CSLPQ
             K priority;
             int level;
             std::vector<MASPtr> next;
-            std::atomic_flag inserting;
+            std::atomic<bool> inserting;
 
         public:
             Node(const K& priority, int level) : priority(priority), level(level), next(level), inserting(true)
@@ -54,7 +54,7 @@ namespace CSLPQ
 
             bool IsInserting() const
             {
-                return this->inserting.test();
+                return this->inserting.load();
             }
 
             void SetNext(int level, SPtr node)
@@ -79,7 +79,7 @@ namespace CSLPQ
 
             void SetDoneInserting()
             {
-                this->inserting.clear();
+                this->inserting.store(false);
             }
     };
 
@@ -96,7 +96,7 @@ namespace CSLPQ
             V data;
             int level;
             std::vector<MASPtr> next;
-            std::atomic_flag inserting;
+            std::atomic<bool> inserting;
 
         public:
             KVNode(const K& priority, int level) requires std::is_default_constructible_v<V> : priority(priority),
@@ -151,7 +151,7 @@ namespace CSLPQ
 
             bool IsInserting() const
             {
-                return this->inserting.test();
+                return this->inserting.load();
             }
 
             void SetNext(int level, SPtr node)
@@ -176,7 +176,7 @@ namespace CSLPQ
 
             void SetDoneInserting()
             {
-                this->inserting.clear();
+                this->inserting.store(false);
             }
     };
 }
