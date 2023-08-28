@@ -18,8 +18,17 @@ namespace CSLPQ
             typedef jss::shared_ptr<Node<K>> SPtr;
 
             const int max_level;
+            const int max_size;
             SPtr head;
             std::atomic<uint64_t> count;
+
+            void Wait()
+            {
+                if (this->max_size)
+                {
+                    while (this->count >= this->max_size);
+                }
+            }
 
             int GenerateRandomLevel()
             {
@@ -158,13 +167,15 @@ namespace CSLPQ
             }
 
         public:
-            explicit Queue(int max_level = 4) : max_level(max_level), head(new Node<K>(K(), max_level + 1)), count(0)
+            explicit Queue(int max_level = 4, int max_size = 0) : max_level(max_level), max_size(max_size),
+                           head(new Node<K>(K(), max_level + 1)), count(0)
             {
             }
 
             Queue(const Queue&) = delete;
 
-            Queue(Queue&& other) noexcept : max_level(other.max_level), head(other.head), count(other.count)
+            Queue(Queue&& other) noexcept : max_level(other.max_level), max_size(other.max_size), head(other.head),
+                  count(other.count)
             {
                 other.head = nullptr;
             }
@@ -174,6 +185,7 @@ namespace CSLPQ
             Queue& operator=(Queue&& other) noexcept
             {
                 this->max_level = other.max_level;
+                this->max_size = other.max_size;
                 this->head = other.head;
                 this->count = other.count;
                 other.head = nullptr;
@@ -182,6 +194,7 @@ namespace CSLPQ
 
             void Push(const K& priority)
             {
+                this->Wait();
                 int new_level = this->GenerateRandomLevel();
                 SPtr new_node(new Node<K>(priority, new_level));
                 std::vector<SPtr> predecessors(this->max_level + 1);
@@ -297,8 +310,17 @@ namespace CSLPQ
             typedef jss::shared_ptr<KVNode<K, V>> SPtr;
 
             const int max_level;
+            const int max_size;
             SPtr head;
             std::atomic<uint64_t> count;
+
+            void Wait()
+            {
+                if (this->max_size)
+                {
+                    while (this->count >= this->max_size);
+                }
+            }
 
             int GenerateRandomLevel()
             {
@@ -437,15 +459,18 @@ namespace CSLPQ
             }
 
         public:
-            KVQueue(int max_level = 4) : max_level(max_level), head(new KVNode<K, V>(K(), max_level + 1)), count(0)
+            KVQueue(int max_level = 4, int max_size = 0) : max_level(max_level), max_size(max_size),
+                    head(new KVNode<K, V>(K(), max_level + 1)), count(0)
             {
             }
 
             KVQueue(const KVQueue&) = delete;
 
-            KVQueue(KVQueue&& other)  noexcept : max_level(other.max_level), head(other.head), count(other.count)
+            KVQueue(KVQueue&& other)  noexcept : max_level(other.max_level), max_size(other.max_size), head(other.head),
+                    count(other.count)
             {
                 other.head = nullptr;
+                other.count = 0;
             }
 
             KVQueue& operator=(const KVQueue&) = delete;
@@ -453,14 +478,17 @@ namespace CSLPQ
             KVQueue& operator=(KVQueue&& other) noexcept
             {
                 this->max_level = other.max_level;
+                this->max_size = other.max_size;
                 this->head = other.head;
                 this->count = other.count;
                 other.head = nullptr;
+                other.count = 0;
                 return *this;
             }
 
             void Push(const K& priority)
             {
+                this->Wait();
                 int new_level = this->GenerateRandomLevel();
                 SPtr new_node(new KVNode<K, V>(priority, new_level));
                 std::vector<SPtr> predecessors(this->max_level + 1);
@@ -496,6 +524,7 @@ namespace CSLPQ
 
             void Push(const K& priority, const V& data)
             {
+                this->Wait();
                 int new_level = this->GenerateRandomLevel();
                 SPtr new_node(new KVNode<K, V>(priority, data, new_level));
                 std::vector<SPtr> predecessors(this->max_level + 1);
