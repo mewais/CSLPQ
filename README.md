@@ -41,13 +41,13 @@ kvqueue.Push(key);          // Inserts default value
 kvqueue.Push(key, value);   // Inserts value
 bool success = kvqueue.TryPop(key, value);       // Fills key and value and returns true if queue is not empty
 std::string str = kvqueue.ToString(bool all_levels = false);   // Returns a string representation of the queue. enabling all levels will print all levels of the skiplist, otherwise only the first level is printed
-uint64_t size = kvqueue.Size();     // Returns the number of elements in the queue, this is only an approximate count due to the concurrent nature of the queue
+uint64_t size = kvqueue.GetSize();     // Returns the number of elements in the queue, this is only an approximate count due to the concurrent nature of the queue
 
 CSLPQ::KQueue<KeyType> queue(max_levels = 4, max_size = 0);               // If max_size is set to anything other than 0, the queue will be approximately bounded to that size, any pushes beyond that will stall
 queue.Push(key);
 bool success = queue.TryPop(key);       // Fills key and returns true if queue is not empty
 std::string str = queue.ToString(bool all_levels = false);   // Returns a string representation of the queue. enabling all levels will print all levels of the skiplist, otherwise only the first level is printed
-uint64_t size = queue.Size();     // Returns the number of elements in the queue, this is only an approximate count due to the concurrent nature of the queue
+uint64_t size = queue.GetSize();     // Returns the number of elements in the queue, this is only an approximate count due to the concurrent nature of the queue
 ```
 
 Because of dependency on Atomic128, you must compile with the `-Wno-strict-aliasing` flag enabled.

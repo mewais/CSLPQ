@@ -20,13 +20,13 @@ namespace CSLPQ
             const uint32_t max_level;
             const uint32_t max_size;
             SPtr head;
-            std::atomic<uint32_t> count;
+            std::atomic<uint32_t> size;
 
             void Wait()
             {
                 if (this->max_size)
                 {
-                    while (this->count >= this->max_size);
+                    while (this->size >= this->max_size);
                 }
             }
 
@@ -168,14 +168,14 @@ namespace CSLPQ
 
         public:
             explicit Queue(uint32_t max_level = 4, uint32_t max_size = 0) : max_level(max_level), max_size(max_size),
-                           head(new Node<K>(K(), max_level + 1)), count(0)
+                           head(new Node<K>(K(), max_level + 1)), size(0)
             {
             }
 
             Queue(const Queue&) = delete;
 
             Queue(Queue&& other) noexcept : max_level(other.max_level), max_size(other.max_size), head(other.head),
-                  count(other.count)
+                  size(other.size)
             {
                 other.head = nullptr;
             }
@@ -187,7 +187,7 @@ namespace CSLPQ
                 this->max_level = other.max_level;
                 this->max_size = other.max_size;
                 this->head = other.head;
-                this->count = other.count;
+                this->size = other.size;
                 other.head = nullptr;
                 return *this;
             }
@@ -225,7 +225,7 @@ namespace CSLPQ
                     break;
                 }
                 new_node->SetDoneInserting();
-                this->count++;
+                this->size++;
             }
 
             bool TryPop(K& priority)
@@ -252,7 +252,7 @@ namespace CSLPQ
                 bool success = first->TestAndSetMark(0, successor);
                 if (success)
                 {
-                    this->count--;
+                    this->size--;
                     return true;
                 }
                 else
@@ -261,9 +261,9 @@ namespace CSLPQ
                 }
             }
 
-            uint32_t GetCount() const
+            uint32_t GetSize() const
             {
-                return this->count.load();
+                return this->size.load();
             }
 
             std::string ToString(bool all_levels = false) requires Printable<K>
@@ -312,13 +312,13 @@ namespace CSLPQ
             const uint32_t max_level;
             const uint32_t max_size;
             SPtr head;
-            std::atomic<uint32_t> count;
+            std::atomic<uint32_t> size;
 
             void Wait()
             {
                 if (this->max_size)
                 {
-                    while (this->count >= this->max_size);
+                    while (this->size >= this->max_size);
                 }
             }
 
@@ -460,17 +460,17 @@ namespace CSLPQ
 
         public:
             KVQueue(uint32_t max_level = 4, uint32_t max_size = 0) : max_level(max_level), max_size(max_size),
-                    head(new KVNode<K, V>(K(), max_level + 1)), count(0)
+                    head(new KVNode<K, V>(K(), max_level + 1)), size(0)
             {
             }
 
             KVQueue(const KVQueue&) = delete;
 
             KVQueue(KVQueue&& other)  noexcept : max_level(other.max_level), max_size(other.max_size), head(other.head),
-                    count(other.count)
+                    size(other.size)
             {
                 other.head = nullptr;
-                other.count = 0;
+                other.size = 0;
             }
 
             KVQueue& operator=(const KVQueue&) = delete;
@@ -480,9 +480,9 @@ namespace CSLPQ
                 this->max_level = other.max_level;
                 this->max_size = other.max_size;
                 this->head = other.head;
-                this->count = other.count;
+                this->size = other.size;
                 other.head = nullptr;
-                other.count = 0;
+                other.size = 0;
                 return *this;
             }
 
@@ -519,7 +519,7 @@ namespace CSLPQ
                     break;
                 }
                 new_node->SetDoneInserting();
-                this->count++;
+                this->size++;
             }
 
             void Push(const K& priority, const V& data)
@@ -555,7 +555,7 @@ namespace CSLPQ
                     break;
                 }
                 new_node->SetDoneInserting();
-                this->count++;
+                this->size++;
             }
 
             bool TryPop(K& priority, V& data)
@@ -583,7 +583,7 @@ namespace CSLPQ
                 bool success = first->TestAndSetMark(0, successor);
                 if (success)
                 {
-                    this->count--;
+                    this->size--;
                     return true;
                 }
                 else
@@ -592,9 +592,9 @@ namespace CSLPQ
                 }
             }
 
-            uint32_t GetCount() const
+            uint32_t GetSize() const
             {
-                return this->count.load();
+                return this->size.load();
             }
 
             std::string ToString(bool all_levels = false) requires Printable<K> && Printable<V>
