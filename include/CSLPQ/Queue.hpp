@@ -17,10 +17,10 @@ namespace CSLPQ
         private:
             typedef jss::shared_ptr<Node<K>> SPtr;
 
-            const int max_level;
-            const int max_size;
+            const uint32_t max_level;
+            const uint32_t max_size;
             SPtr head;
-            std::atomic<uint64_t> count;
+            std::atomic<uint32_t> count;
 
             void Wait()
             {
@@ -30,11 +30,11 @@ namespace CSLPQ
                 }
             }
 
-            int GenerateRandomLevel()
+            uint32_t GenerateRandomLevel()
             {
                 static std::random_device rd;
                 static std::mt19937 mt(rd());
-                static std::uniform_int_distribution<int> dist(1, this->max_level + 1);
+                static std::uniform_int_distribution<uint32_t> dist(1, this->max_level + 1);
 
                 return dist(mt);
             }
@@ -54,7 +54,7 @@ namespace CSLPQ
                 {
                     retry = false;
                     predecessor = this->head;
-                    for (auto level = this->max_level; level >= 0; --level)
+                    for (int64_t level = this->max_level; level >= 0; --level)
                     {
                         current = predecessor->GetNextPointer(level);
                         while (current)
@@ -125,7 +125,7 @@ namespace CSLPQ
                 {
                     retry = false;
                     predecessor = this->head;
-                    for (auto level = this->max_level; level >= 0; --level)
+                    for (int64_t level = this->max_level; level >= 0; --level)
                     {
                         current = predecessor->GetNextPointer(level);
                         if (current)
@@ -167,7 +167,7 @@ namespace CSLPQ
             }
 
         public:
-            explicit Queue(int max_level = 4, int max_size = 0) : max_level(max_level), max_size(max_size),
+            explicit Queue(uint32_t max_level = 4, uint32_t max_size = 0) : max_level(max_level), max_size(max_size),
                            head(new Node<K>(K(), max_level + 1)), count(0)
             {
             }
@@ -195,7 +195,7 @@ namespace CSLPQ
             void Push(const K& priority)
             {
                 this->Wait();
-                int new_level = this->GenerateRandomLevel();
+                uint32_t new_level = this->GenerateRandomLevel();
                 SPtr new_node(new Node<K>(priority, new_level));
                 std::vector<SPtr> predecessors(this->max_level + 1);
                 std::vector<SPtr> successors(this->max_level + 1);
@@ -203,7 +203,7 @@ namespace CSLPQ
                 while (true)
                 {
                     this->FindLastOfPriority(priority, predecessors, successors);
-                    for (auto level = 0; level < new_level; ++level)
+                    for (uint32_t level = 0; level < new_level; ++level)
                     {
                         new_node->SetNext(level, successors[level]);
                     }
@@ -211,7 +211,7 @@ namespace CSLPQ
                     {
                         continue;
                     }
-                    for (auto level = 1; level < new_level; ++level)
+                    for (uint32_t level = 1; level < new_level; ++level)
                     {
                         while (true)
                         {
@@ -242,7 +242,7 @@ namespace CSLPQ
                     return false;
                 }
 
-                for (int level = first->GetLevel() - 1; level >= 1; --level)
+                for (uint32_t level = first->GetLevel() - 1; level >= 1; --level)
                 {
                     first->SetNextMark(level);
                 }
@@ -261,7 +261,7 @@ namespace CSLPQ
                 }
             }
 
-            uint64_t GetCount() const
+            uint32_t GetCount() const
             {
                 return this->count.load();
             }
@@ -269,8 +269,8 @@ namespace CSLPQ
             std::string ToString(bool all_levels = false) requires Printable<K>
             {
                 std::stringstream ss;
-                int max = all_levels? this->max_level : 0;
-                for (int level = 0; level <= max; ++level)
+                uint32_t max = all_levels? this->max_level : 0;
+                for (uint32_t level = 0; level <= max; ++level)
                 {
                     if (all_levels)
                     {
@@ -309,10 +309,10 @@ namespace CSLPQ
         private:
             typedef jss::shared_ptr<KVNode<K, V>> SPtr;
 
-            const int max_level;
-            const int max_size;
+            const uint32_t max_level;
+            const uint32_t max_size;
             SPtr head;
-            std::atomic<uint64_t> count;
+            std::atomic<uint32_t> count;
 
             void Wait()
             {
@@ -322,11 +322,11 @@ namespace CSLPQ
                 }
             }
 
-            int GenerateRandomLevel()
+            uint32_t GenerateRandomLevel()
             {
                 static std::random_device rd;
                 static std::mt19937 mt(rd());
-                static std::uniform_int_distribution<int> dist(1, this->max_level + 1);
+                static std::uniform_int_distribution<uint32_t> dist(1, this->max_level + 1);
 
                 return dist(mt);
             }
@@ -346,7 +346,7 @@ namespace CSLPQ
                 {
                     retry = false;
                     predecessor = this->head;
-                    for (auto level = this->max_level; level >= 0; --level)
+                    for (int64_t level = this->max_level; level >= 0; --level)
                     {
                         current = predecessor->GetNextPointer(level);
                         while (current)
@@ -417,7 +417,7 @@ namespace CSLPQ
                 {
                     retry = false;
                     predecessor = this->head;
-                    for (auto level = this->max_level; level >= 0; --level)
+                    for (int64_t level = this->max_level; level >= 0; --level)
                     {
                         current = predecessor->GetNextPointer(level);
                         if (current)
@@ -459,7 +459,7 @@ namespace CSLPQ
             }
 
         public:
-            KVQueue(int max_level = 4, int max_size = 0) : max_level(max_level), max_size(max_size),
+            KVQueue(uint32_t max_level = 4, uint32_t max_size = 0) : max_level(max_level), max_size(max_size),
                     head(new KVNode<K, V>(K(), max_level + 1)), count(0)
             {
             }
@@ -489,7 +489,7 @@ namespace CSLPQ
             void Push(const K& priority)
             {
                 this->Wait();
-                int new_level = this->GenerateRandomLevel();
+                uint32_t new_level = this->GenerateRandomLevel();
                 SPtr new_node(new KVNode<K, V>(priority, new_level));
                 std::vector<SPtr> predecessors(this->max_level + 1);
                 std::vector<SPtr> successors(this->max_level + 1);
@@ -497,7 +497,7 @@ namespace CSLPQ
                 while (true)
                 {
                     this->FindLastOfPriority(priority, predecessors, successors);
-                    for (auto level = 0; level < new_level; ++level)
+                    for (uint32_t level = 0; level < new_level; ++level)
                     {
                         new_node->SetNext(level, successors[level]);
                     }
@@ -505,7 +505,7 @@ namespace CSLPQ
                     {
                         continue;
                     }
-                    for (auto level = 1; level < new_level; ++level)
+                    for (uint32_t level = 1; level < new_level; ++level)
                     {
                         while (true)
                         {
@@ -525,7 +525,7 @@ namespace CSLPQ
             void Push(const K& priority, const V& data)
             {
                 this->Wait();
-                int new_level = this->GenerateRandomLevel();
+                uint32_t new_level = this->GenerateRandomLevel();
                 SPtr new_node(new KVNode<K, V>(priority, data, new_level));
                 std::vector<SPtr> predecessors(this->max_level + 1);
                 std::vector<SPtr> successors(this->max_level + 1);
@@ -533,7 +533,7 @@ namespace CSLPQ
                 while (true)
                 {
                     this->FindLastOfPriority(priority, predecessors, successors);
-                    for (auto level = 0; level < new_level; ++level)
+                    for (uint32_t level = 0; level < new_level; ++level)
                     {
                         new_node->SetNext(level, successors[level]);
                     }
@@ -541,7 +541,7 @@ namespace CSLPQ
                     {
                         continue;
                     }
-                    for (auto level = 1; level < new_level; ++level)
+                    for (uint32_t level = 1; level < new_level; ++level)
                     {
                         while (true)
                         {
@@ -572,7 +572,7 @@ namespace CSLPQ
                     return false;
                 }
 
-                for (int level = first->GetLevel() - 1; level >= 1; --level)
+                for (uint32_t level = first->GetLevel() - 1; level >= 1; --level)
                 {
                     first->SetNextMark(level);
                 }
@@ -592,7 +592,7 @@ namespace CSLPQ
                 }
             }
 
-            uint64_t GetCount() const
+            uint32_t GetCount() const
             {
                 return this->count.load();
             }
@@ -600,8 +600,8 @@ namespace CSLPQ
             std::string ToString(bool all_levels = false) requires Printable<K> && Printable<V>
             {
                 std::stringstream ss;
-                int max = all_levels? this->max_level : 0;
-                for (int level = 0; level <= max; ++level)
+                uint32_t max = all_levels? this->max_level : 0;
+                for (uint32_t level = 0; level <= max; ++level)
                 {
                     if (all_levels)
                     {
