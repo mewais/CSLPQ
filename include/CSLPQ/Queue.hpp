@@ -19,6 +19,7 @@ namespace CSLPQ
 
             const int max_level;
             SPtr head;
+            std::atomic<uint64_t> count;
 
             int GenerateRandomLevel()
             {
@@ -157,13 +158,13 @@ namespace CSLPQ
             }
 
         public:
-            explicit Queue(int max_level = 4) : max_level(max_level), head(new Node<K>(K(), max_level + 1))
+            explicit Queue(int max_level = 4) : max_level(max_level), head(new Node<K>(K(), max_level + 1)), count(0)
             {
             }
 
             Queue(const Queue&) = delete;
 
-            Queue(Queue&& other)  noexcept : max_level(other.max_level), head(other.head)
+            Queue(Queue&& other) noexcept : max_level(other.max_level), head(other.head), count(other.count)
             {
                 other.head = nullptr;
             }
@@ -174,6 +175,7 @@ namespace CSLPQ
             {
                 this->max_level = other.max_level;
                 this->head = other.head;
+                this->count = other.count;
                 other.head = nullptr;
                 return *this;
             }
@@ -210,6 +212,7 @@ namespace CSLPQ
                     break;
                 }
                 new_node->SetDoneInserting();
+                this->count++;
             }
 
             bool TryPop(K& priority)
@@ -236,12 +239,18 @@ namespace CSLPQ
                 bool success = first->TestAndSetMark(0, successor);
                 if (success)
                 {
+                    this->count--;
                     return true;
                 }
                 else
                 {
                     return false;
                 }
+            }
+
+            uint64_t GetCount() const
+            {
+                return this->count.load();
             }
 
             std::string ToString(bool all_levels = false) requires Printable<K>
@@ -289,6 +298,7 @@ namespace CSLPQ
 
             const int max_level;
             SPtr head;
+            std::atomic<uint64_t> count;
 
             int GenerateRandomLevel()
             {
@@ -427,13 +437,13 @@ namespace CSLPQ
             }
 
         public:
-            KVQueue(int max_level = 4) : max_level(max_level), head(new KVNode<K, V>(K(), max_level + 1))
+            KVQueue(int max_level = 4) : max_level(max_level), head(new KVNode<K, V>(K(), max_level + 1)), count(0)
             {
             }
 
             KVQueue(const KVQueue&) = delete;
 
-            KVQueue(KVQueue&& other)  noexcept : max_level(other.max_level), head(other.head)
+            KVQueue(KVQueue&& other)  noexcept : max_level(other.max_level), head(other.head), count(other.count)
             {
                 other.head = nullptr;
             }
@@ -444,6 +454,7 @@ namespace CSLPQ
             {
                 this->max_level = other.max_level;
                 this->head = other.head;
+                this->count = other.count;
                 other.head = nullptr;
                 return *this;
             }
@@ -480,6 +491,7 @@ namespace CSLPQ
                     break;
                 }
                 new_node->SetDoneInserting();
+                this->count++;
             }
 
             void Push(const K& priority, const V& data)
@@ -514,6 +526,7 @@ namespace CSLPQ
                     break;
                 }
                 new_node->SetDoneInserting();
+                this->count++;
             }
 
             bool TryPop(K& priority, V& data)
@@ -541,12 +554,18 @@ namespace CSLPQ
                 bool success = first->TestAndSetMark(0, successor);
                 if (success)
                 {
+                    this->count--;
                     return true;
                 }
                 else
                 {
                     return false;
                 }
+            }
+
+            uint64_t GetCount() const
+            {
+                return this->count.load();
             }
 
             std::string ToString(bool all_levels = false) requires Printable<K> && Printable<V>
