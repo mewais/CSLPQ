@@ -7,11 +7,12 @@ The queue started with fine grained locks, then later switched to a lock-free CA
 The library is in working order, and currently being used in the [DCSim simulator](https://github.com/DCArch/DCSim). If you encounter any bugs, please open an issue.
 
 ## Features
+- A C++ header only implementation
 - Templated Key or Key/Value priority queues
 - Uses skiplists for faster insertion/deletion
-- A C++ header only implementation
 - Thread safe.
 - Lock-free.
+- Uses delayed deletion to avoid stack overflow on chain deletions.
 
 ## Dependencies
 - [Atomic128 library](https://github.com/mewais/Atomic128) (included)

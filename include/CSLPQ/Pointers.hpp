@@ -41,6 +41,7 @@
 #define _JSS_ATOMIC_SHARED_PTR
 #include <atomic>
 #include <memory>
+#include <deque>
 #include "Atomic128.hpp"
 
 namespace jss{
@@ -68,7 +69,19 @@ namespace jss{
         template<typename T>
         void do_delete(T* p)
         {
-            delete p;
+            thread_local std::deque<T*> to_delete;
+            thread_local bool deleting;
+
+            to_delete.emplace_back(p);
+            if(!deleting){
+                deleting=true;
+                while(!to_delete.empty()){
+                    T* dp=to_delete.back();
+                    to_delete.pop_back();
+                    delete dp;
+                }
+                deleting=false;
+            }
         }
     };
 
