@@ -962,6 +962,7 @@ namespace jss{
                 counted_ptr oldval(guard.val);
                 counted_ptr newval = oldval;
                 newval.mark = true;
+                oldval.mark = false;
                 if(p.CompareExchange(oldval,newval)){
                     return true;
                 }
