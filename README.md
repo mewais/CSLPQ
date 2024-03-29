@@ -4,7 +4,7 @@ I needed one for a project of mine and thought, given my sheer laziness and unwi
 The queue started with fine grained locks, then later switched to a lock-free CAS based implementation.
 
 ## Status
-The library is in working order, and currently being used in the [DCSim simulator](https://github.com/DCArch/DCSim). If you encounter any bugs, please open an issue.
+The library is in working order, and currently being used in the [DCSim simulator](https://github.com/DCArch/DCSim). If you encounter any bugs, please open an issue or submit a pull request.
 
 ## Features
 - A C++ header only implementation
@@ -54,4 +54,4 @@ uint64_t size = queue.GetSize();     // Returns the number of elements in the qu
 Because of dependency on Atomic128, you must compile with the `-Wno-strict-aliasing` flag enabled.
 
 ## License
-The atomic_shared_ptr library is licensed under the BSD license. The rest is licensed under the MIT license.
+The atomic_shared_ptr library is licensed under the BSD license. The rest is licensed under the CC-BY-NC-SA 4.0 License - see the [LICENSE](LICENSE) file for details.
