@@ -1,3 +1,5 @@
+[![FreePalestine.Dev](https://freepalestine.dev/header/1)](https://freepalestine.dev)
+
 # Concurrent SkipList-based Priority Queue
 CSLPQ is a concurrent priority queue based on skiplists that has started as a way to test out ChatGPT. 
 I needed one for a project of mine and thought, given my sheer laziness and unwillingness to learn and write one myself, it would be a great opportunity to utilize ChatGPT. That said, ChatGPT quickly proved unable to create a functioning priority queue on its own, so I had to write one myself, with help from it of course.
