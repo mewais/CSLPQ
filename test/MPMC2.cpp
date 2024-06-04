@@ -1,8 +1,9 @@
 #include <iostream>
 #include <thread>
-#include <barrier>
+#include <pthread.h>
 #include <vector>
 #include <set>
+#include <mutex>
 #include <algorithm>
 
 #include "CSLPQ/Queue.hpp"
@@ -13,12 +14,12 @@ CSLPQ::Queue<uint64_t> queue;
 std::vector<std::vector<uint64_t>> keys;
 std::set<uint64_t> keys_ref;
 std::mutex keys_ref_mutex;
-std::barrier barrier(10);
-std::atomic<uint64_t> count = 0;
+pthread_barrier_t barrier;
+std::atomic<uint64_t> count;
 
 void insert(std::vector<uint64_t>& local_keys)
 {
-    barrier.arrive_and_wait();
+    pthread_barrier_wait(&barrier);
     for (uint64_t i = 0; i < COUNT / 10; i++)
     {
         queue.Push(local_keys[i]);
@@ -52,6 +53,9 @@ void remove_()
 
 int main()
 {
+    count = 0;
+    pthread_barrier_init(&barrier, NULL, 10);
+
     // First, fill the keys and ref
     std::vector<uint64_t> full_keys;
     for (uint64_t i = 0; i < COUNT; i++)
