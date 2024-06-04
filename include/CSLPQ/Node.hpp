@@ -8,9 +8,10 @@
 
 namespace CSLPQ
 {
-    template<KeyType K>
+    template<typename K>
     class Node
     {
+        static_assert(is_comparable<K>::value, "Key type must be totally ordered");
         public:
             typedef jss::shared_ptr<Node<K>> SPtr;
             typedef jss::atomic_shared_ptr<Node<K>> ASPtr;
@@ -83,9 +84,13 @@ namespace CSLPQ
             }
     };
 
-    template<KeyType K, ValueType V>
+    template<typename K, typename V>
     class KVNode
     {
+        static_assert(is_comparable<K>::value, "Key type must be totally ordered");
+        static_assert(std::is_move_constructible<V>::value || std::is_copy_constructible<V>::value ||
+                      std::is_default_constructible<V>::value || std::is_fundamental<V>::value, 
+                      "Value type must be fundamental, or default constructible, or copy or move constructible");
         public:
             typedef jss::shared_ptr<KVNode<K, V>> SPtr;
             typedef jss::atomic_shared_ptr<KVNode<K, V>> ASPtr;
@@ -99,23 +104,31 @@ namespace CSLPQ
             std::atomic<bool> inserting;
 
         public:
-            KVNode(const K& priority, int level) requires std::is_default_constructible_v<V> : priority(priority),
+            template <typename T = V>
+            KVNode(const K& priority, int level, 
+                   typename std::enable_if<std::is_default_constructible<T>::value, int>::type = 0) : priority(priority),
                    data(V()), level(level), next(level), inserting(true)
             {
             }
 
-            KVNode(const K& priority, const V& value, int level) requires std::is_fundamental_v<V> : priority(priority),
+            template <typename T = V>
+            KVNode(const K& priority, const V& value, int level, 
+                   typename std::enable_if<std::is_fundamental<T>::value, int>::type = 0) : priority(priority), 
                    data(value), level(level), next(level), inserting(true)
             {
             }
 
-            KVNode(const K& priority, const V& value, int level) requires OnlyMoveConstructible<V> : priority(priority),
-                   data(std::move(value)), level(level), next(level), inserting(true)
+            template <typename T = V>
+            KVNode(const K& priority, const V& value, int level,
+                   typename std::enable_if<std::is_move_constructible<T>::value && !std::is_fundamental<T>::value, int>::type = 0) : 
+                   priority(priority), data(std::move(value)), level(level), next(level), inserting(true)
             {
             }
 
-            KVNode(const K& priority, const V& value, int level) requires OnlyCopyConstructible<V> : priority(priority),
-                   data(value), level(level), next(level), inserting(true)
+            template <typename T = V>
+            KVNode(const K& priority, const V& value, int level,
+                   typename std::enable_if<std::is_copy_constructible<T>::value && !std::is_move_constructible<T>::value, int>::type = 0) : 
+                   priority(priority), data(value), level(level), next(level), inserting(true)
             {
             }
 

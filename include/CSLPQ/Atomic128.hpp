@@ -2,6 +2,7 @@
 #define __ATOMIC128_HPP__
 
 #include <cstdint>
+#include <utility>
 #include <type_traits>
 #if defined(_MSC_VER)
 #include <intrin.h>
@@ -9,16 +10,29 @@
 
 namespace A128
 {
-    template <typename T>
-    concept NiceSize128 = requires(T a)
+    template <typename T, typename EqualTo>
+    struct is_equality_comparable_impl
     {
-        requires sizeof(a) == 16 && std::alignment_of_v<T> == 16;
-        requires std::is_trivially_copyable_v<T> && std::is_copy_assignable_v<T> && std::is_move_assignable_v<T>;
+        template<class U, class V>
+        static auto test(U*) -> decltype(std::declval<U>() == std::declval<V>());
+        template<typename, typename>
+        static auto test(...) -> std::false_type;
+
+        using type = typename std::is_same<bool, decltype(test<T, EqualTo>(0))>::type;
     };
 
-    template <NiceSize128 T>
+    template<class T, class EqualTo = T>
+    struct is_equality_comparable : is_equality_comparable_impl<T, EqualTo>::type {};
+
+    template <typename T>
     class Atomic128
     {
+        static_assert(sizeof(T) == 16, "Template type must be of size 16 bytes");
+        static_assert(std::alignment_of<T>::value == 16, "Template type must be of 16 byte aligned");
+        static_assert(std::is_trivially_copyable<T>::value, "Template type must be trivially copyable");
+        static_assert(std::is_copy_assignable<T>::value, "Template type must be copy assignable");
+        static_assert(std::is_move_assignable<T>::value, "Template type must be move assignable");
+
         private:
             struct alignas(16) Data
             {
@@ -180,23 +194,25 @@ namespace A128
                 return this->Load();
             }
 
-            T& operator=(T desired)
+            T& operator=(const T desired)
             {
                 this->Store(desired);
-                return desired;
+                return *this;
             }
 
             T& operator=(const Atomic128<T>& desired) = delete;
             T operator=(const Atomic128<T>&& desired) = delete;
 
-            bool operator==(T desired) requires std::equality_comparable<T>
+            bool operator==(T desired)
             {
+                static_assert(is_equality_comparable<T>::value, "Template type must be comparable with equality operator");
                 return this->Load() == desired;
             }
 
-            bool operator!=(T desired) requires std::equality_comparable<T>
+            bool operator!=(T desired)
             {
-                return this->Load() != desired;
+                static_assert(is_equality_comparable<T>::value, "Template type must be comparable with equality operator");
+                return !(this->Load() == desired);
             }
     };
 }

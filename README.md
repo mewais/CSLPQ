@@ -9,7 +9,7 @@ The queue started with fine grained locks, then later switched to a lock-free CA
 The library is in working order, and currently being used in the [DCSim simulator](https://github.com/DCArch/DCSim). If you encounter any bugs, please open an issue or submit a pull request.
 
 ## Features
-- A C++ header only implementation
+- A C++11 header only implementation
 - Templated Key or Key/Value priority queues
 - Uses skiplists for faster insertion/deletion
 - Thread safe.

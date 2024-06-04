@@ -11,9 +11,10 @@
 
 namespace CSLPQ
 {
-    template<KeyType K>
+    template<typename K>
     class Queue
     {
+        static_assert(is_comparable<K>::value, "Key type must be totally ordered");
         private:
             typedef jss::shared_ptr<Node<K>> SPtr;
 
@@ -266,8 +267,9 @@ namespace CSLPQ
                 return this->size.load();
             }
 
-            std::string ToString(bool all_levels = false) requires Printable<K>
+            std::string ToString(bool all_levels = false)
             {
+                static_assert(is_printable<K>::value, "Key type must be printable");
                 std::stringstream ss;
                 uint32_t max = all_levels? this->max_level : 0;
                 for (uint32_t level = 0; level <= max; ++level)
@@ -303,9 +305,13 @@ namespace CSLPQ
             }
     };
 
-    template<KeyType K, ValueType V>
+    template<typename K, typename V>
     class KVQueue
     {
+        static_assert(is_comparable<K>::value, "Key type must be totally ordered");
+        static_assert(std::is_move_constructible<V>::value || std::is_copy_constructible<V>::value ||
+                      std::is_default_constructible<V>::value || std::is_fundamental<V>::value, 
+                      "Value type must be fundamental, or default constructible, or copy or move constructible");
         private:
             typedef jss::shared_ptr<KVNode<K, V>> SPtr;
 
@@ -597,8 +603,10 @@ namespace CSLPQ
                 return this->size.load();
             }
 
-            std::string ToString(bool all_levels = false) requires Printable<K> && Printable<V>
+            std::string ToString(bool all_levels = false)
             {
+                static_assert(is_printable<K>::value, "Key type must be printable");
+                static_assert(is_printable<V>::value, "Value type must be printable");
                 std::stringstream ss;
                 uint32_t max = all_levels? this->max_level : 0;
                 for (uint32_t level = 0; level <= max; ++level)
